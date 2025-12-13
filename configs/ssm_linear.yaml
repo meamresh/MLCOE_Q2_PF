@@ -1,0 +1,38 @@
+
+# configs/ssm_linear.yaml
+name: lgssm_constant_velocity_2d
+seed: 42
+N: 200
+dt: 1.0
+
+dimensions:
+  nx: 4   # [x, vx, y, vy]
+  ny: 2   # [x, y]
+  nv: 2   # 2 independent acceleration channels
+  nw: 2   # 2 independent measurement channels
+
+params:
+  sigma_a: 0.5        # acceleration noise std
+  sigma_z: 5.0        # measurement noise std
+  Sigma0_diag: [10.0, 5.0, 10.0, 5.0]  # initial covariance diagonal
+
+# Matrices in row-major (lists of lists)
+A:
+  - [1, 1, 0, 0]
+  - [0, 1, 0, 0]
+  - [0, 0, 1, 1]
+  - [0, 0, 0, 1]
+
+B_raw:  # unscaled by sigma_a; we'll multiply inside model
+  - [0.5, 0.0]
+  - [1.0, 0.0]
+  - [0.0, 0.5]
+  - [0.0, 1.0]
+
+C:
+  - [1, 0, 0, 0]
+  - [0, 0, 1, 0]
+
+D:      # scaled by sigma_z inside model -> R = D D^T
+  - [1.0, 0.0]
+  - [0.0, 1.0]
