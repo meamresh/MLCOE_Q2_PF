@@ -1,11 +1,3 @@
-
-# Project Title
-
-A brief description of what this project does and who it's for
-
-
-
-````markdown
 # Particle Flow Filters & Differentiable Particle Filtering (DPF)
 
 _Work-in-progress repo by **Amresh Verma**_
@@ -52,7 +44,7 @@ mlcoe-q2/
 └─ reports/
    ├─ part1/                 # short report (PDF) + figures
    └─ final/                 # final report (PDF) + figures
-````
+```
 
 > Uses **Python ≥3.10**, TensorFlow, TensorFlow Probability, NumPy/SciPy, and Matplotlib.
 > GPU is optional; CPU runs are sufficient for baseline experiments.
