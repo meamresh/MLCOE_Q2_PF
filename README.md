@@ -1,4 +1,9 @@
 
+# Project Title
+
+A brief description of what this project does and who it's for
+
+
 
 ````markdown
 # Particle Flow Filters & Differentiable Particle Filtering (DPF)
@@ -19,14 +24,12 @@ _Work-in-progress repo by **Amresh Verma**_
   - EDH / LEDH particle flows  
   - Invertible PF-PF  
   - Kernel particle flow filter (scalar vs matrix kernels)
-- Clear answers to assignment items with **tests & results**  
-  (accuracy, ESS, runtime/memory, stability)
 
 ### Part 2
 - Stochastic particle flows (stiffness mitigation)  
 - Differentiable PF with **entropy-regularized OT (Sinkhorn)**  
 - Soft resampling  
-- Consolidated comparisons, gradient-stability analysis, and final report
+- Consolidated comparisons, gradient-stability analysis
 
 ---
 
@@ -95,7 +98,6 @@ Configuration files (e.g. `configs/ssm_sv.yaml`) control seeds, noise levels, pa
 * **PMCMC baseline (optional)**
   Andrieu, Doucet & Holenstein (2010)
 
-> These align with the assignment reference list provided by the MLCOE TSRL team.
 
 ---
 
