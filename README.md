@@ -46,7 +46,7 @@ mlcoe-q2/
    └─ final/                 # final report (PDF) + figures
 ```
 
-> Uses **Python ≥3.10**, TensorFlow, TensorFlow Probability, NumPy/SciPy, and Matplotlib.
+> Uses **Python ≥3.10**, TensorFlow, TensorFlow Probability, and Matplotlib.
 > GPU is optional; CPU runs are sufficient for baseline experiments.
 
 ---
