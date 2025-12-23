@@ -11,6 +11,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.filters.kalman import KalmanFilter
+from src.filters.ekf import ExtendedKalmanFilter
+from src.filters.ukf import UnscentedKalmanFilter
+from src.models.ssm_range_bearing import RangeBearingSSM
 
 
 class TestKalmanFilter(unittest.TestCase):
@@ -166,6 +169,128 @@ class TestKalmanFilter(unittest.TestCase):
         self.assertEqual(tf.shape(results["P_filt"])[0], 2)
         self.assertEqual(tf.shape(results["P_filt"])[1], 2)
         self.assertEqual(tf.shape(results["P_filt"])[2], 2)
+
+
+class TestNonlinearFilters(unittest.TestCase):
+    """Test cases for EKF and UKF on the range-bearing model."""
+
+    def setUp(self) -> None:
+        """Set up nonlinear model and filters."""
+        tf.random.set_seed(123)
+        self.dt = 0.1
+
+        # Process and measurement noise
+        Q = tf.eye(3, dtype=tf.float32) * 0.01
+        R = tf.eye(2, dtype=tf.float32) * 0.05
+
+        self.ssm = RangeBearingSSM(dt=self.dt, process_noise=Q, meas_noise=R)
+        self.initial_state = tf.constant([0.0, 0.0, 0.0], dtype=tf.float32)
+        self.initial_cov = tf.eye(3, dtype=tf.float32) * 0.1
+
+        self.landmarks = tf.constant(
+            [[5.0, 5.0],
+             [-5.0, 5.0]],
+            dtype=tf.float32,
+        )
+
+        self.ekf = ExtendedKalmanFilter(self.ssm, self.initial_state,
+                                        self.initial_cov)
+        self.ukf = UnscentedKalmanFilter(self.ssm, self.initial_state,
+                                         self.initial_cov,
+                                         alpha=0.1, beta=1.0, kappa=0.0)
+
+    def _one_step_measurement(self, state: tf.Tensor) -> tf.Tensor:
+        """Generate a single noisy measurement from a given state."""
+        true_meas = self.ssm.measurement_model(state, self.landmarks)[0]
+        meas_std = tf.sqrt(tf.linalg.diag_part(self.ssm.R))
+        noise = tf.random.normal([tf.shape(self.landmarks)[0], 2],
+                                 mean=0.0, stddev=meas_std,
+                                 dtype=tf.float32)
+        return true_meas + noise
+
+    def test_ekf_predict_and_update(self) -> None:
+        """EKF predict/update should maintain PSD covariance and finite values."""
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+
+        # Predict
+        x_pred, P_pred = self.ekf.predict(control)
+        self.assertEqual(x_pred.shape, (3,))
+        self.assertEqual(P_pred.shape, (3, 3))
+
+        # Update
+        z = self._one_step_measurement(self.initial_state)
+        x_upd, P_upd, residual = self.ekf.update(z, self.landmarks)
+
+        self.assertEqual(x_upd.shape, (3,))
+        self.assertEqual(P_upd.shape, (3, 3))
+        self.assertEqual(residual.shape[0], 2 * tf.shape(self.landmarks)[0])
+
+        # Covariance should be symmetric and PSD
+        tf.debugging.assert_near(P_upd, 0.5 * (P_upd + tf.transpose(P_upd)),
+                                 atol=1e-6)
+        eigvals = tf.linalg.eigvalsh(P_upd)
+        self.assertTrue(tf.reduce_all(eigvals > 0.0))
+
+    def test_ukf_predict_and_update(self) -> None:
+        """UKF predict/update should maintain PSD covariance and finite values."""
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+
+        # Predict
+        x_pred, P_pred = self.ukf.predict(control)
+        self.assertEqual(x_pred.shape, (3,))
+        self.assertEqual(P_pred.shape, (3, 3))
+
+        # Update
+        z = self._one_step_measurement(self.initial_state)
+        x_upd, P_upd, residual = self.ukf.update(z, self.landmarks)
+
+        self.assertEqual(x_upd.shape, (3,))
+        self.assertEqual(P_upd.shape, (3, 3))
+        self.assertEqual(residual.shape[0], 2 * tf.shape(self.landmarks)[0])
+
+        # Covariance should be symmetric and PSD
+        tf.debugging.assert_near(P_upd, 0.5 * (P_upd + tf.transpose(P_upd)),
+                                 atol=1e-6)
+        eigvals = tf.linalg.eigvalsh(P_upd)
+        self.assertTrue(tf.reduce_all(eigvals > 0.0))
+
+    def test_ekf_ukf_close_on_short_horizon(self) -> None:
+        """On a short horizon, EKF and UKF estimates should be reasonably close."""
+        num_steps = 10
+        state = tf.identity(self.initial_state)
+
+        ekf_states = []
+        ukf_states = []
+
+        for step in range(num_steps):
+            t = tf.cast(step, tf.float32)
+            v = 1.0 + 0.2 * tf.sin(t * 0.1)
+            omega = 0.1 + 0.05 * tf.cos(t * 0.1)
+            control = tf.stack([v, omega])
+
+            # Propagate true state
+            state = self.ssm.motion_model(state, control)[0]
+
+            # Measurement
+            z = self._one_step_measurement(state)
+
+            # EKF
+            self.ekf.predict(control)
+            self.ekf.update(z, self.landmarks)
+            ekf_states.append(tf.identity(self.ekf.state))
+
+            # UKF
+            self.ukf.predict(control)
+            self.ukf.update(z, self.landmarks)
+            ukf_states.append(tf.identity(self.ukf.state))
+
+        ekf_states = tf.stack(ekf_states)
+        ukf_states = tf.stack(ukf_states)
+
+        # Position estimates should not diverge wildly
+        pos_diff = tf.norm(ekf_states[:, :2] - ukf_states[:, :2], axis=1)
+        mean_pos_diff = tf.reduce_mean(pos_diff)
+        self.assertLess(float(mean_pos_diff), 5.0)
 
 
 if __name__ == '__main__':

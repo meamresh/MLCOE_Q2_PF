@@ -9,6 +9,7 @@ filtered state estimates against ground truth, including RMSE and NEES.
 from __future__ import annotations
 
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 
 def compute_rmse(estimates: tf.Tensor, ground_truth: tf.Tensor) -> float:
@@ -214,3 +215,258 @@ def compute_per_dimension_rmse(estimates: tf.Tensor,
             estimates = tf.squeeze(estimates, axis=-1)
 
     return tf.sqrt(tf.reduce_mean((estimates - ground_truth) ** 2, axis=0))
+
+
+
+"""
+Mostly for UKF and EKF Tests
+"""
+
+"""
+Filter consistency tests: NEES, NIS, and innovation whiteness.
+
+These metrics quantify whether filter covariance estimates match actual errors,
+detecting linearization breakdown or sigma-point approximation failures.
+"""
+
+
+def compute_nis(innovations: list[tf.Tensor],
+                innovation_covariances: list[tf.Tensor],
+                n_meas_per_landmark: int = 2) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    """
+    Compute Normalized Innovation Squared (NIS).
+
+    NIS tests filter consistency using measurement residuals (innovations).
+    Unlike NEES, NIS doesn't require ground truth.
+
+    Parameters
+    ----------
+    innovations : list[tf.Tensor]
+        Innovation sequences, each shape (n_landmarks, n_meas).
+    innovation_covariances : list[tf.Tensor]
+        Innovation covariances, each shape (n_landmarks, n_meas, n_meas).
+    n_meas_per_landmark : int
+        Number of measurements per landmark (2 for range-bearing).
+
+    Returns
+    -------
+    nis : tf.Tensor
+        NIS values, shape (N * n_landmarks,).
+    lower_bound : tf.Tensor
+        Lower confidence bound (scalar).
+    upper_bound : tf.Tensor
+        Upper confidence bound (scalar).
+    """
+    nis_list = []
+
+    for innov, S_list in zip(innovations, innovation_covariances):
+        n_landmarks = tf.shape(innov)[0]
+        for i in range(n_landmarks):
+            S = S_list[i]
+            # Add regularization
+            S_reg = S + 1e-6 * tf.eye(n_meas_per_landmark, dtype=tf.float32)
+            
+            S_inv = tf.linalg.inv(S_reg)
+            innov_i = innov[i]
+            # Compute y^T S^-1 y
+            nis_val = tf.einsum('i,ij,j->', innov_i, S_inv, innov_i)
+            nis_list.append(nis_val)
+
+    nis = tf.stack(nis_list)
+
+    # Chi-squared bounds (95% confidence interval)
+    chi2_dist = tfp.distributions.Chi2(df=n_meas_per_landmark)
+    lower_bound = chi2_dist.quantile(0.025)
+    upper_bound = chi2_dist.quantile(0.975)
+
+    return nis, lower_bound, upper_bound
+
+
+def compute_autocorrelation(x: tf.Tensor, nlags: int = 20) -> tf.Tensor:
+    """
+    Compute autocorrelation function using TensorFlow.
+
+    Parameters
+    ----------
+    x : tf.Tensor
+        Time series, shape (N,).
+    nlags : int
+        Number of lags.
+
+    Returns
+    -------
+    acf : tf.Tensor
+        Autocorrelation function, shape (nlags+1,).
+    """
+    x = x - tf.reduce_mean(x)
+    n = tf.shape(x)[0]
+    
+    acf_list = []
+    variance = tf.reduce_sum(x ** 2) / tf.cast(n, tf.float32)
+    
+    for lag in range(nlags + 1):
+        if lag == 0:
+            acf_list.append(tf.constant(1.0, dtype=tf.float32))
+        else:
+            x1 = x[:-lag]
+            x2 = x[lag:]
+            covariance = tf.reduce_sum(x1 * x2) / tf.cast(n, tf.float32)
+            acf_list.append(covariance / variance)
+    
+    return tf.stack(acf_list)
+
+
+def test_innovation_whiteness(innovations: tf.Tensor,
+                              nlags: int = 20) -> dict:
+    """
+    Test if innovation sequence is white (temporally uncorrelated).
+
+    White innovations indicate optimal filtering. Non-white innovations
+    suggest model mismatch or filter suboptimality.
+
+    Parameters
+    ----------
+    innovations : tf.Tensor
+        Flattened innovation sequence, shape (N,).
+    nlags : int
+        Number of lags for autocorrelation test.
+
+    Returns
+    -------
+    results : dict
+        Dictionary containing:
+        - 'autocorrelation': Autocorrelation function
+        - 'is_white': Boolean indicating whiteness
+        - 'mean': Sample mean
+        - 'std': Sample standard deviation
+        - 'is_zero_mean': Boolean indicating zero-mean property
+        - 'confidence_bound': Confidence bound for whiteness test
+    """
+    # Autocorrelation
+    autocorr = compute_autocorrelation(innovations, nlags)
+
+    # Zero-mean test
+    mean = tf.reduce_mean(innovations)
+    std = tf.math.reduce_std(innovations)
+    is_zero_mean = tf.abs(mean) < 0.1 * std
+
+    # Whiteness test: autocorrelation should be near zero for lags > 0
+    # Use 95% confidence bound: ±1.96/sqrt(N)
+    n_samples = tf.cast(tf.shape(innovations)[0], tf.float32)
+    conf_bound = 1.96 / tf.sqrt(n_samples)
+    is_white = tf.reduce_all(tf.abs(autocorr[1:]) < conf_bound)
+
+    return {
+        'autocorrelation': autocorr,
+        'is_white': is_white,
+        'mean': mean,
+        'std': std,
+        'is_zero_mean': is_zero_mean,
+        'confidence_bound': conf_bound
+    }
+
+
+def analyze_filter_consistency(true_states: tf.Tensor,
+                               ekf_results: dict,
+                               ukf_results: dict,
+                               compute_nees_fn) -> dict:
+    """
+    Comprehensive consistency analysis for EKF and UKF.
+
+    Parameters
+    ----------
+    true_states : tf.Tensor
+        Ground truth states, shape (N, n_states).
+    ekf_results : dict
+        EKF results containing 'states', 'covariances', 'innovations', 'S'.
+    ukf_results : dict
+        UKF results containing 'states', 'covariances', 'innovations', 'S'.
+    compute_nees_fn : callable
+        Function to compute NEES: compute_nees(estimates, covariances, ground_truth).
+
+    Returns
+    -------
+    analysis : dict
+        Comprehensive consistency metrics for both filters.
+    """
+    # NEES
+    ekf_nees = compute_nees_fn(
+        ekf_results['states'], ekf_results['covariances'], true_states
+    )
+    ukf_nees = compute_nees_fn(
+        ukf_results['states'], ukf_results['covariances'], true_states
+    )
+    
+    n_states = tf.shape(true_states)[1]
+    chi2_dist = tfp.distributions.Chi2(df=tf.cast(n_states, tf.float32))
+    nees_lower = chi2_dist.quantile(0.025)
+    nees_upper = chi2_dist.quantile(0.975)
+
+    # NIS
+    ekf_nis, nis_lower, nis_upper = compute_nis(
+        ekf_results['innovations'], ekf_results['S']
+    )
+    ukf_nis, _, _ = compute_nis(
+        ukf_results['innovations'], ukf_results['S']
+    )
+
+    # Innovation whiteness
+    ekf_innov_flat = tf.concat([tf.reshape(inn, [-1]) 
+                                for inn in ekf_results['innovations']], axis=0)
+    ukf_innov_flat = tf.concat([tf.reshape(inn, [-1]) 
+                                for inn in ukf_results['innovations']], axis=0)
+
+    ekf_whiteness = test_innovation_whiteness(ekf_innov_flat)
+    ukf_whiteness = test_innovation_whiteness(ukf_innov_flat)
+
+    # Consistency percentage (within bounds)
+    ekf_nees_in_bounds = tf.logical_and(
+        ekf_nees >= nees_lower, ekf_nees <= nees_upper
+    )
+    ukf_nees_in_bounds = tf.logical_and(
+        ukf_nees >= nees_lower, ukf_nees <= nees_upper
+    )
+    
+    ekf_nees_consistent = tf.reduce_mean(
+        tf.cast(ekf_nees_in_bounds, tf.float32)
+    ) * 100.0
+    ukf_nees_consistent = tf.reduce_mean(
+        tf.cast(ukf_nees_in_bounds, tf.float32)
+    ) * 100.0
+
+    ekf_nis_in_bounds = tf.logical_and(
+        ekf_nis >= nis_lower, ekf_nis <= nis_upper
+    )
+    ukf_nis_in_bounds = tf.logical_and(
+        ukf_nis >= nis_lower, ukf_nis <= nis_upper
+    )
+    
+    ekf_nis_consistent = tf.reduce_mean(
+        tf.cast(ekf_nis_in_bounds, tf.float32)
+    ) * 100.0
+    ukf_nis_consistent = tf.reduce_mean(
+        tf.cast(ukf_nis_in_bounds, tf.float32)
+    ) * 100.0
+
+    return {
+        'ekf': {
+            'nees': ekf_nees,
+            'nis': ekf_nis,
+            'nees_consistent_pct': ekf_nees_consistent,
+            'nis_consistent_pct': ekf_nis_consistent,
+            'whiteness': ekf_whiteness
+        },
+        'ukf': {
+            'nees': ukf_nees,
+            'nis': ukf_nis,
+            'nees_consistent_pct': ukf_nees_consistent,
+            'nis_consistent_pct': ukf_nis_consistent,
+            'whiteness': ukf_whiteness
+        },
+        'bounds': {
+            'nees_lower': nees_lower,
+            'nees_upper': nees_upper,
+            'nis_lower': nis_lower,
+            'nis_upper': nis_upper
+        }
+    }

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import tensorflow as tf
 from src.models.ssm_lgssm import LGSSM
+from src.models.ssm_range_bearing import RangeBearingSSM
+
 
 def _parse_yaml_simple(config_path: str) -> dict:
     """
@@ -31,6 +33,9 @@ def _parse_yaml_simple(config_path: str) -> dict:
                 cfg[key] = value
             elif key in ["seed", "N", "dt"]:
                 cfg[key] = int(value) if '.' not in value else float(value)
+            elif key in ["scenario"]:
+                # Simple string value
+                cfg[key] = value
             elif key == "dimensions":
                 cfg[key] = {}
                 i += 1
@@ -79,7 +84,7 @@ def _parse_yaml_simple(config_path: str) -> dict:
                         # Not indented, we've reached the end of this section
                         break
                 continue
-            elif key in ["A", "B_raw", "C", "D"]:
+            elif key in ["A", "B_raw", "C", "D", "landmarks"]:
                 cfg[key] = []
                 i += 1
                 while i < len(lines):
@@ -96,6 +101,15 @@ def _parse_yaml_simple(config_path: str) -> dict:
                         # Next top-level key, stop parsing this matrix
                         break
                     i += 1
+                continue
+            elif key in ["Q_diag", "R_diag", "P0_diag", "m0"]:
+                # Simple list-valued numeric fields
+                if value.startswith('[') and value.endswith(']'):
+                    cfg[key] = [float(x.strip()) for x in value[1:-1].split(',')]
+                else:
+                    # Fallback to single float
+                    cfg[key] = float(value) if value else 0.0
+                i += 1
                 continue
         i += 1
     
@@ -142,3 +156,56 @@ def generate_lgssm_from_yaml(config_path: str):
         "y_obs": tf.constant(Y_np[:, 1], dtype=tf.float32),
     }
     return model, X, Y, data_dict
+
+
+def generate_range_bearing_from_yaml(config_path: str):
+    """
+    Load a RangeBearingSSM from YAML configuration.
+
+    Parameters
+    ----------
+    config_path : str
+        Path to the YAML config.
+
+    Returns
+    -------
+    model : RangeBearingSSM
+        The instantiated nonlinear state-space model.
+    landmarks : tf.Tensor
+        Landmark positions, shape (M, 2).
+    m0 : tf.Tensor
+        Initial state mean, shape (3,).
+    P0 : tf.Tensor
+        Initial covariance matrix, shape (3, 3).
+    meta : dict
+        Dictionary with additional config fields such as 'scenario' and 'seed'.
+    """
+    cfg = _parse_yaml_simple(config_path)
+
+    dt = float(cfg.get("dt", 0.1))
+
+    # Process and measurement noise covariances
+    q_diag = cfg.get("Q_diag", [0.01, 0.01, 0.01])
+    r_diag = cfg.get("R_diag", [0.05, 0.05])
+
+    Q = tf.linalg.diag(tf.constant(q_diag, dtype=tf.float32))
+    R = tf.linalg.diag(tf.constant(r_diag, dtype=tf.float32))
+
+    model = RangeBearingSSM(dt=dt, process_noise=Q, meas_noise=R)
+
+    # Landmarks
+    landmarks = tf.constant(cfg.get("landmarks", []), dtype=tf.float32)
+
+    # Initial state and covariance
+    m0 = tf.constant(cfg.get("m0", [0.0, 0.0, 0.0]), dtype=tf.float32)
+    P0_diag = cfg.get("P0_diag", [0.5, 0.5, 0.5])
+    P0 = tf.linalg.diag(tf.constant(P0_diag, dtype=tf.float32))
+
+    meta = {
+        "name": cfg.get("name", "range_bearing_ssm"),
+        "scenario": cfg.get("scenario", "moderate"),
+        "seed": int(cfg.get("seed", 0)),
+    }
+
+    return model, landmarks, m0, P0, meta
+

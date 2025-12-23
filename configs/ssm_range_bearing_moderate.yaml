@@ -1,0 +1,21 @@
+name: range_bearing_moderate
+scenario: moderate
+seed: 42
+dt: 0.1
+
+# Process and measurement noise (diagonal)
+Q_diag: [0.01, 0.01, 0.01]
+R_diag: [0.05, 0.05]
+
+# Initial state and covariance
+m0: [0.0, 0.0, 0.0]
+P0_diag: [0.5, 0.5, 0.5]
+
+# Landmark positions (x, y)
+landmarks:
+  - [5.0, 5.0]
+  - [-5.0, 5.0]
+  - [5.0, -5.0]
+  - [-5.0, -5.0]
+
+
