@@ -260,7 +260,7 @@ def compute_nis(innovations: list[tf.Tensor],
     nis_list = []
 
     for innov, S_list in zip(innovations, innovation_covariances):
-        n_landmarks = tf.shape(innov)[0]
+        n_landmarks = int(tf.shape(innov)[0].numpy())
         for i in range(n_landmarks):
             S = S_list[i]
             # Add regularization
@@ -268,6 +268,10 @@ def compute_nis(innovations: list[tf.Tensor],
             
             S_inv = tf.linalg.inv(S_reg)
             innov_i = innov[i]
+            # Ensure innov_i is 1D (not scalar)
+            if tf.rank(innov_i) == 0:
+                # If scalar, expand to 1D
+                innov_i = tf.expand_dims(innov_i, 0)
             # Compute y^T S^-1 y
             nis_val = tf.einsum('i,ij,j->', innov_i, S_inv, innov_i)
             nis_list.append(nis_val)
@@ -304,14 +308,21 @@ def compute_autocorrelation(x: tf.Tensor, nlags: int = 20) -> tf.Tensor:
     acf_list = []
     variance = tf.reduce_sum(x ** 2) / tf.cast(n, tf.float32)
     
+    # Handle constant signal (variance = 0)
+    is_constant = variance < 1e-10
+    
     for lag in range(nlags + 1):
         if lag == 0:
             acf_list.append(tf.constant(1.0, dtype=tf.float32))
         else:
-            x1 = x[:-lag]
-            x2 = x[lag:]
-            covariance = tf.reduce_sum(x1 * x2) / tf.cast(n, tf.float32)
-            acf_list.append(covariance / variance)
+            if is_constant:
+                # For constant signal, all lags are perfectly correlated (1.0)
+                acf_list.append(tf.constant(1.0, dtype=tf.float32))
+            else:
+                x1 = x[:-lag]
+                x2 = x[lag:]
+                covariance = tf.reduce_sum(x1 * x2) / tf.cast(n, tf.float32)
+                acf_list.append(covariance / variance)
     
     return tf.stack(acf_list)
 
