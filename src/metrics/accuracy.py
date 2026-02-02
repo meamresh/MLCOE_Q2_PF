@@ -308,21 +308,14 @@ def compute_autocorrelation(x: tf.Tensor, nlags: int = 20) -> tf.Tensor:
     acf_list = []
     variance = tf.reduce_sum(x ** 2) / tf.cast(n, tf.float32)
     
-    # Handle constant signal (variance = 0)
-    is_constant = variance < 1e-10
-    
     for lag in range(nlags + 1):
         if lag == 0:
             acf_list.append(tf.constant(1.0, dtype=tf.float32))
         else:
-            if is_constant:
-                # For constant signal, all lags are perfectly correlated (1.0)
-                acf_list.append(tf.constant(1.0, dtype=tf.float32))
-            else:
-                x1 = x[:-lag]
-                x2 = x[lag:]
-                covariance = tf.reduce_sum(x1 * x2) / tf.cast(n, tf.float32)
-                acf_list.append(covariance / variance)
+            x1 = x[:-lag]
+            x2 = x[lag:]
+            covariance = tf.reduce_sum(x1 * x2) / tf.cast(n, tf.float32)
+            acf_list.append(covariance / variance)
     
     return tf.stack(acf_list)
 

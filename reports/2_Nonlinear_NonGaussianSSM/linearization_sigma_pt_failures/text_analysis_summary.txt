@@ -1,0 +1,56 @@
+======================================================================
+EKF / UKF LINEARIZATION & SIGMA-POINT FAILURE ANALYSIS
+======================================================================
+
+======================================================================
+Moderate Nonlinearity (Distant Landmark)
+Landmark position: [[10. 10.]]
+======================================================================
+
+[1] EKF LINEARIZATION ERROR ANALYSIS
+  Summary (variance error: higher = worse linearization):
+    σ=0.1: Var Error=0.937
+    σ=0.5: Var Error=0.283
+    σ=1.0: Var Error=0.046
+    σ=2.0: Var Error=0.077
+
+[2] UKF SIGMA POINT COLLAPSE ANALYSIS
+  Collapse Ratios: [0.2645139694213867, 0.264880508184433]
+  Interpretation:
+    Partial collapse (ratio < 0.3) - marginal spread
+
+[3] FILTER CONSISTENCY (NEES)
+  Average NEES over 10 steps:
+    EKF: 0.08 (expected ~3.0 for 3D state)
+    UKF: 0.13
+  Interpretation (95% CI: [0.22, 9.35]):
+    EKF: Overly conservative (underconfident)
+    UKF: Overly conservative
+
+
+======================================================================
+Strong Nonlinearity (Close Landmark)
+Landmark position: [[0.5 0.2]]
+======================================================================
+
+[1] EKF LINEARIZATION ERROR ANALYSIS
+  Summary (variance error: higher = worse linearization):
+    σ=0.1: Var Error=0.867
+    σ=0.5: Var Error=0.660
+    σ=1.0: Var Error=1.189
+    σ=2.0: Var Error=1.669
+
+[2] UKF SIGMA POINT COLLAPSE ANALYSIS
+  Collapse Ratios: [0.14399582147598267, 0.21950966119766235]
+  Interpretation:
+    Partial collapse (ratio < 0.3) - marginal spread
+
+[3] FILTER CONSISTENCY (NEES)
+  Average NEES over 10 steps:
+    EKF: 0.05 (expected ~3.0 for 3D state)
+    UKF: 11770.93
+  Interpretation (95% CI: [0.22, 9.35]):
+    EKF: Overly conservative (underconfident)
+    UKF: Filter diverged or inconsistent
+
+

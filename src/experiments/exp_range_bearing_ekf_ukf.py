@@ -25,7 +25,7 @@ from src.filters.ukf import UnscentedKalmanFilter
 # ---------------------------------------------------------------------
 # Report directory structure
 # ---------------------------------------------------------------------
-BASE_REPORT_DIR = Path("reports/range_bearing")
+BASE_REPORT_DIR = Path("reports/2_Nonlinear_NonGaussianSSM")
 EXPERIMENT_DIR = BASE_REPORT_DIR / "experiments"
 TUNING_DIR = BASE_REPORT_DIR / "tuning"
 
@@ -772,20 +772,17 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='experiment',
                        choices=['experiment', 'tuning'],
                        help='Run mode: experiment or tuning')
-    parser.add_argument('--scenario', type=str, default='moderate',
+    parser.add_argument('--scenario', type=str, default='strong',
                        choices=['moderate', 'strong'],
                        help='Nonlinearity scenario')
     parser.add_argument('--num_steps', type=int, default=100,
                        help='Number of simulation steps')
-    parser.add_argument('--alpha', type=float, default=0.001,
+    parser.add_argument('--alpha', type=float, default=0.1,
                        help='UKF alpha parameter')
-    parser.add_argument('--beta', type=float, default=2.0,
+    parser.add_argument('--beta', type=float, default=1.5,
                        help='UKF beta parameter')
-    parser.add_argument('--kappa', type=float, default=0.0,
+    parser.add_argument('--kappa', type=float, default=-1.0,
                        help='UKF kappa parameter')
-    #parser.add_argument('--output_dir', type=str,
-                       #default='reports/range_bearing',
-                       #help='Output directory for results')
     args = parser.parse_args()
 
     if args.mode == 'experiment':
@@ -805,3 +802,4 @@ if __name__ == '__main__':
         )
 
 #python3 -m src.experiments.exp_range_bearing_ekf_ukf --mode tuning --scenario strong
+#python3 -m src.experiments.exp_range_bearing_ekf_ukf --mode experiment

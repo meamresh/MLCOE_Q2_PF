@@ -1,0 +1,85 @@
+
+================================================================================
+EXPERIMENT SUMMARY
+================================================================================
+
+NONLINEARITY:
+  • LEDH best in nonlinearity (avg rank: 2.67)
+
+SPARSITY:
+  • EDH best in sparsity (avg rank: 1.60)
+
+DIMENSION:
+  • EDH best in dimension (avg rank: 1.00)
+
+CONDITIONING:
+  • EDH best in conditioning (avg rank: 2.00)
+
+CORRELATION:
+  • EDH best in correlation (avg rank: 1.33)
+
+STRESS:
+  • EDH best in stress (avg rank: 1.75)
+  • PFF_SCALAR consistent in stress (avg rank: 2.00)
+
+OVERALL:
+  • EDH: Avg rank 1.75, 17 wins, consistent in 5 categories
+  • LEDH: Avg rank 3.25, 1 wins, consistent in 0 categories
+  • PFF_MATRIX: Avg rank 3.50, 0 wins, consistent in 0 categories
+  • PFPF_LEDH: Avg rank 3.79, 2 wins, consistent in 0 categories
+  • PFF_SCALAR: Avg rank 3.79, 3 wins, consistent in 1 categories
+  • PFPF_EDH: Avg rank 4.92, 1 wins, consistent in 0 categories
+
+CAUSAL INSIGHTS:
+  • Covariance Cond Vs Rmse: 0.865 correlation with RMSE
+
+MATRIX VS SCALAR:
+  • MATRIX is 1.1% more accurate on average
+  • 21 scenarios are close races (margin < 0.5 RMSE) - differences may be noise
+  • MATRIX has 64% time overhead - tuning needed for fair comparison
+
+================================================================================
+FILTER RECOMMENDATIONS (Rank-Based Analysis)
+================================================================================
+
+EDH:
+  ✓ Best for: sparsity, dimension, conditioning, correlation, stress
+  ✗ Avoid for: nonlinearity
+  Stats: RMSE=5.575, Time=3.367s, Success=100.0%, Wins=17, Avg Rank=1.75
+
+LEDH:
+  ✓ Best for: nonlinearity
+  ✗ Avoid for: sparsity, conditioning, correlation, stress
+  Stats: RMSE=3.571, Time=5.050s, Success=100.0%, Wins=1, Avg Rank=3.25
+
+PFF_MATRIX:
+  ✗ Avoid for: sparsity, dimension, conditioning, correlation
+  Stats: RMSE=3.322, Time=14.642s, Success=100.0%, Wins=0, Avg Rank=3.50
+
+PFPF_LEDH:
+  ✗ Avoid for: sparsity, dimension, conditioning, stress
+  Stats: RMSE=4.051, Time=8.966s, Success=100.0%, Wins=2, Avg Rank=3.79
+
+PFF_SCALAR:
+  ◉ Consistent in: stress
+  ✗ Avoid for: nonlinearity, sparsity, dimension, conditioning, correlation
+  Stats: RMSE=3.358, Time=8.922s, Success=100.0%, Wins=3, Avg Rank=3.79
+
+PFPF_EDH:
+  ✗ Avoid for: nonlinearity, sparsity, dimension, conditioning, correlation, stress
+  Stats: RMSE=6.401, Time=3.544s, Success=100.0%, Wins=1, Avg Rank=4.92
+
+================================================================================
+PFF_MATRIX vs PFF_SCALAR DETAILED ANALYSIS
+================================================================================
+
+Head-to-Head: SCALAR wins: 11, MATRIX wins: 13, Close races: 21
+Performance: SCALAR avg RMSE: 3.358, MATRIX avg RMSE: 3.322, MATRIX improvement: 1.1%
+Computational: SCALAR avg time: 8.922s, MATRIX avg time: 14.642s, MATRIX overhead: 64.1%
+
+Key Insights:
+  • MATRIX is 1.1% more accurate on average
+  • 21 scenarios are close races (margin < 0.5 RMSE) - differences may be noise
+  • MATRIX has 64% time overhead - tuning needed for fair comparison
+
+================================================================================

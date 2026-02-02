@@ -44,7 +44,7 @@ tfd = tfp.distributions
 # ---------------------------------------------------------------------
 # Report directory structure
 # ---------------------------------------------------------------------
-OUTPUT_DIR = Path("reports/range_bearing/runtime_memory")
+OUTPUT_DIR = Path("reports/2_Nonlinear_NonGaussianSSM/EKF_UKF_PF_Comparison")
 
 
 # ============================================================================
@@ -1378,10 +1378,10 @@ if __name__ == "__main__":
             )
 
 # Run scaling study with 10 trials
-#python3 exp_runtime_memory.py --scaling --num-trials 10
+#python3 -m src.experiments.exp_runtime_memory --scaling --num-trials 10
 
 # Run comprehensive evaluation with 5000 particles
-#python3 exp_runtime_memory.py --comprehensive --num-particles 5000
+#python3 -m src.experiments.exp_runtime_memory --comprehensive --num-particles 5000
 
 # Run both with custom parameters
-#python3 exp_runtime_memory.py --scaling --comprehensive --num-steps 150 --seed 123
+#python3 -m src.experiments.exp_runtime_memory --scaling --comprehensive --num-steps 150 --seed 123

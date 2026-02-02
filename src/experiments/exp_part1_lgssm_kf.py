@@ -116,7 +116,7 @@ if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser()
     p.add_argument("--config", type=str, default="configs/ssm_linear.yaml")
-    p.add_argument("--out_dir", type=str, default="reports/part1/figures")
+    p.add_argument("--out_dir", type=str, default="reports/1_LinearGaussianSSM/figures")
     args = p.parse_args()
     summary = run_experiment(args.config, args.out_dir)
     print(summary)

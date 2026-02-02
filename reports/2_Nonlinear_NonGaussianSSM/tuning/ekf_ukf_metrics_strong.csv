@@ -1,0 +1,5 @@
+metric,ekf,ukf
+final_pos_error,2.724854,1.978890
+final_heading_error,0.521591,0.425602
+mean_pos_error,1.624835,1.114172
+UKF Wins, 31.43 % Better

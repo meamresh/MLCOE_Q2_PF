@@ -1,0 +1,5 @@
+metric,ekf,ukf
+final_pos_error,1.217550,1.810517
+final_heading_error,0.221230,0.314230
+mean_pos_error,0.698014,0.768732
+EKF Wins, 10.13 % Better

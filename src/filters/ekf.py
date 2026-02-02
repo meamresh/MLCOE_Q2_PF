@@ -109,22 +109,34 @@ class ExtendedKalmanFilter:
 
         num_landmarks = tf.shape(landmarks)[0]
 
-        meas_pred = self.ssm.measurement_model(self.state, landmarks)[0]
+        # Measurement prediction: handle both batched and unbatched SSMs
+        meas_pred_full = self.ssm.measurement_model(self.state, landmarks)
+        if len(meas_pred_full.shape) > 1:
+            meas_pred = meas_pred_full[0]
+        else:
+            meas_pred = meas_pred_full
+
         meas_pred_vec = tf.reshape(meas_pred, [-1])
         meas_vec = tf.reshape(measurement, [-1])
 
-        H = self.ssm.measurement_jacobian(self.state, landmarks)[0]
+        # Measurement Jacobian: handle both [batch, M, n] and [M, n]
+        H_full = self.ssm.measurement_jacobian(self.state, landmarks)
+        if len(H_full.shape) == 3:
+            H = H_full[0]
+        else:
+            H = H_full
         R_full = self.ssm.full_measurement_cov(num_landmarks)
 
         residual = tf.reshape(meas_vec - meas_pred_vec, [-1])
 
-        # Wrap bearing residuals to [-pi, pi]
-        idx_bearings = tf.range(1, 2 * num_landmarks, 2, dtype=tf.int32)
-        bearing_res = tf.gather(residual, idx_bearings)
-        bearing_res_wrapped = tf.math.atan2(tf.sin(bearing_res),
-                                            tf.cos(bearing_res))
-        residual = tf.tensor_scatter_nd_update(
-            residual, idx_bearings[:, tf.newaxis], bearing_res_wrapped)
+        # Only wrap bearings if meas_per_landmark == 2 (range-bearing format)
+        if hasattr(self.ssm, "meas_per_landmark") and self.ssm.meas_per_landmark == 2:
+            idx_bearings = tf.range(1, 2 * num_landmarks, 2, dtype=tf.int32)
+            bearing_res = tf.gather(residual, idx_bearings)
+            bearing_res_wrapped = tf.math.atan2(tf.sin(bearing_res), tf.cos(bearing_res))
+            residual = tf.tensor_scatter_nd_update(
+                residual, idx_bearings[:, tf.newaxis], bearing_res_wrapped
+            )
 
         S = H @ self.covariance @ tf.transpose(H) + R_full
 

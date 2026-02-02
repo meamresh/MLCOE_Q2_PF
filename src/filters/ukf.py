@@ -269,12 +269,29 @@ class UnscentedKalmanFilter:
         measurement = tf.cast(measurement, tf.float32)
 
         num_landmarks = tf.shape(landmarks)[0]
-        meas_dim = 2 * num_landmarks
 
         sigma_points = self.generate_sigma_points(self.state, self.covariance)
         m = tf.shape(sigma_points)[0]
 
         measurements_pred = self.ssm.measurement_model(sigma_points, landmarks)
+
+        # Get actual measurement dimension from the measurement model output
+        # Handle different output shapes:
+        # - Range-bearing SSM: [m, num_landmarks, 2] -> reshape to [m, 2*num_landmarks]
+        # - Acoustic SSM: [m, N_s] -> use as is
+        # - 1D: expand to 2D (shouldn't happen with multiple sigma points)
+        if len(measurements_pred.shape) == 1:
+            measurements_pred = tf.expand_dims(measurements_pred, 0)
+            meas_dim = tf.shape(measurements_pred)[1]
+        elif len(measurements_pred.shape) == 3:
+            batch_size = tf.shape(measurements_pred)[0]
+            num_landmarks_actual = tf.shape(measurements_pred)[1]
+            meas_per_landmark = tf.shape(measurements_pred)[2]
+            meas_dim = num_landmarks_actual * meas_per_landmark
+            measurements_pred = tf.reshape(measurements_pred, [batch_size, meas_dim])
+        else:
+            meas_dim = tf.shape(measurements_pred)[1]
+
         measurements_pred_flat = tf.reshape(measurements_pred, [m, meas_dim])
 
         meas_pred, S = self.unscented_transform(
@@ -285,17 +302,25 @@ class UnscentedKalmanFilter:
         diff_state = sigma_points - tf.reshape(self.state, [1, self.n])
         diff_meas = measurements_pred_flat - meas_pred
 
-        # Wrap bearing differences
-        bearing_indices = tf.range(1, meas_dim, 2, dtype=tf.int32)
-        K_bearings = tf.shape(bearing_indices)[0]
-        bearing_diffs = tf.gather(diff_meas, bearing_indices, axis=1)
-        wrapped = tf.math.atan2(tf.sin(bearing_diffs), tf.cos(bearing_diffs))
+        # Wrap bearing differences (only for range-bearing measurements)
+        expected_range_bearing_dim = 2 * num_landmarks
+        is_range_bearing = tf.equal(meas_dim, expected_range_bearing_dim)
 
-        rows = tf.repeat(tf.range(m, dtype=tf.int32), repeats=K_bearings)
-        cols = tf.tile(bearing_indices, [m])
-        scatter_idx = tf.stack([rows, cols], axis=1)
-        updates = tf.reshape(wrapped, [-1])
-        diff_meas = tf.tensor_scatter_nd_update(diff_meas, scatter_idx, updates)
+        def wrap_bearings():
+            bearing_indices = tf.range(1, meas_dim, 2, dtype=tf.int32)
+            K_bearings = tf.shape(bearing_indices)[0]
+            bearing_diffs = tf.gather(diff_meas, bearing_indices, axis=1)
+            wrapped = tf.math.atan2(tf.sin(bearing_diffs), tf.cos(bearing_diffs))
+            rows = tf.repeat(tf.range(m, dtype=tf.int32), repeats=K_bearings)
+            cols = tf.tile(bearing_indices, [m])
+            scatter_idx = tf.stack([rows, cols], axis=1)
+            updates = tf.reshape(wrapped, [-1])
+            return tf.tensor_scatter_nd_update(diff_meas, scatter_idx, updates)
+
+        def no_wrap():
+            return diff_meas
+
+        diff_meas = tf.cond(is_range_bearing, wrap_bearings, no_wrap)
 
         # Compute cross-covariance
         wc = self.wc[:, tf.newaxis, tf.newaxis]
@@ -317,11 +342,19 @@ class UnscentedKalmanFilter:
         meas_vec = tf.reshape(measurement, [-1])
         residual = meas_vec - meas_pred
 
-        bearing_residuals = tf.gather(residual, bearing_indices)
-        residual = tf.tensor_scatter_nd_update(
-            residual, bearing_indices[:, tf.newaxis],
-            tf.math.atan2(tf.sin(bearing_residuals),
-                         tf.cos(bearing_residuals)))
+        # Wrap bearing residuals (only for range-bearing measurements)
+        def wrap_residual_bearings():
+            bearing_indices = tf.range(1, meas_dim, 2, dtype=tf.int32)
+            bearing_residuals = tf.gather(residual, bearing_indices)
+            return tf.tensor_scatter_nd_update(
+                residual, bearing_indices[:, tf.newaxis],
+                tf.math.atan2(tf.sin(bearing_residuals),
+                             tf.cos(bearing_residuals)))
+
+        def no_wrap_residual():
+            return residual
+
+        residual = tf.cond(is_range_bearing, wrap_residual_bearings, no_wrap_residual)
 
         # Update state
         state_updated = self.state + tf.linalg.matvec(K_gain, residual)

@@ -248,7 +248,7 @@ def run_stability_analysis(config_path: str = "configs/ssm_linear.yaml") -> dict
     return results
 
 
-def generate_analysis_plots(results: dict, output_dir: str = "reports/part1/figures"):
+def generate_analysis_plots(results: dict, output_dir: str = "reports/1_LinearGaussianSSM/figures"):
     """
     Generate comprehensive visualization of stability analysis.
 
@@ -383,7 +383,7 @@ def generate_analysis_plots(results: dict, output_dir: str = "reports/part1/figu
 
 
 def save_summary_table(results: dict, 
-                        output_path: str = "reports/part1/stability_summary.csv"):
+                        output_path: str = "reports/1_LinearGaussianSSM/stability_summary.csv"):
     """
     Save summary statistics to text file.
 

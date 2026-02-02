@@ -1,0 +1,79 @@
+
+======================================================================
+REPLICATING HU & VAN LEEUWEN (2021) FIGURES
+TensorFlow implementation (no NumPy)
+======================================================================
+
+======================================================================
+REPLICATING FIGURE 2: Kernel Force Comparison
+======================================================================
+✓ Saved: figure2_kernel_schematic.pdf
+
+======================================================================
+REPLICATING FIGURE 3: High-Dimensional Lorenz-96 (TensorFlow)
+======================================================================
+Initializing Lorenz-96 (D=1000, N=20)...
+Spinning up truth to chaotic attractor...
+Finding suitable truth snapshot...
+Truth snapshot: x[19]=2.68, x[20]=4.10
+Generating prior ensemble...
+
+Prior RMSE: 6.706
+
+Building localized sample covariance (paper Eq. 29)...
+Observations: 250 out of 1000 dimensions
+Observation for x[20]: 3.59
+Innovation RMSE: 6.488
+
+Running Matrix Kernel PFF...
+  Converged: False, Steps: 500
+Running Scalar Kernel PFF...
+  Converged: False, Steps: 500
+
+======================================================================
+ANALYSIS
+======================================================================
+
+Observed dimension (x[20]) spread:
+  Prior:  1.728
+  Matrix: 0.642 (diversity ratio: 0.371)
+  Scalar: 0.001 (diversity ratio: 0.000)
+
+RMSE (full state):
+  Prior:  6.706
+  Matrix: 6.080 (improvement: 9.3%)
+  Scalar: 6.080 (improvement: 9.3%)
+
+RMSE (observed dimensions only):
+  Prior:  6.446
+  Matrix: 0.976
+  Scalar: 0.978
+
+RMSE (unobserved dimensions only):
+  Prior:  6.790
+  Matrix: 6.997
+  Scalar: 6.998
+
+======================================================================
+CREATING FIGURE
+======================================================================
+
+✓ Saved: figure3_L96.pdf
+
+======================================================================
+REPLICATING SEQUENTIAL LINEAR EXPERIMENT (RMSE TIME SERIES)
+======================================================================
+D=1000, N=20, total_steps=500, assim_interval=20
+Spinning up truth to chaotic attractor...
+Precomputing Gaussian localization matrix (paper Eq. 29)...
+Running forecast/analysis cycles...
+  t=100/500: RMSE(all) noDA=3.770  matrix=1.447  scalar=1.772
+  t=200/500: RMSE(all) noDA=3.688  matrix=1.346  scalar=2.330
+  t=300/500: RMSE(all) noDA=4.538  matrix=1.221  scalar=3.830
+  t=400/500: RMSE(all) noDA=4.295  matrix=0.958  scalar=4.393
+  t=500/500: RMSE(all) noDA=3.913  matrix=1.167  scalar=4.528
+✓ Saved RMSE plot: reports/3_Deterministic_Kernel_Flow/Hu(21)/rmse_time_series_linear_D1000_N20_T500.pdf
+
+======================================================================
+REPLICATION COMPLETE
+======================================================================

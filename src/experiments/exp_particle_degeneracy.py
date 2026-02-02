@@ -38,7 +38,7 @@ tfd = tfp.distributions
 # ---------------------------------------------------------------------
 # Report directory structure
 # ---------------------------------------------------------------------
-OUTPUT_DIR = Path("reports/range_bearing/particle_degeneracy")
+OUTPUT_DIR = Path("reports/2_Nonlinear_NonGaussianSSM/particle_degeneracy")
 
 
 # ============================================================================
