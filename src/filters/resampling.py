@@ -2,9 +2,29 @@
 Resampling algorithms for particle filters.
 
 This module provides common resampling strategies used across
-particle filter implementations.
+particle filter implementations for addressing weight degeneracy.
 
-All functions use TensorFlow only (no NumPy).
+Supported Methods
+-----------------
+- Systematic: Low variance, O(N), most commonly used
+- Multinomial: Simple but higher variance
+- Stratified: Balance between systematic and multinomial
+- Residual: Deterministic + stochastic hybrid
+
+All functions use TensorFlow only (no NumPy) and are JIT-compatible.
+
+Key Concept: Effective Sample Size (ESS)
+----------------------------------------
+ESS = 1 / Σᵢ(wᵢ)² measures how many particles have significant weight.
+- ESS = N: All weights equal (ideal)
+- ESS = 1: One particle has all weight (severe degeneracy)
+- Typical threshold: Resample when ESS < 0.5N or 0.7N
+
+References
+----------
+- Douc, R., Cappe, O., & Moulines, E. (2005). "Comparison of resampling schemes"
+- Liu, J. S., & Chen, R. (1998). "Sequential Monte Carlo methods"
+
 """
 
 from __future__ import annotations
@@ -12,6 +32,12 @@ from __future__ import annotations
 import tensorflow as tf
 
 
+# =============================================================================
+# Core Resampling Algorithms
+# =============================================================================
+
+
+@tf.function
 def systematic_resample(weights: tf.Tensor) -> tf.Tensor:
     """
     Systematic resampling with low variance.
@@ -61,6 +87,7 @@ def systematic_resample(weights: tf.Tensor) -> tf.Tensor:
     return indices
 
 
+@tf.function
 def multinomial_resample(weights: tf.Tensor) -> tf.Tensor:
     """
     Multinomial resampling.
@@ -93,6 +120,7 @@ def multinomial_resample(weights: tf.Tensor) -> tf.Tensor:
     return tf.cast(indices, tf.int32)
 
 
+@tf.function
 def stratified_resample(weights: tf.Tensor) -> tf.Tensor:
     """
     Stratified resampling.
@@ -244,6 +272,7 @@ def resample_particles(
     return resampled, uniform_weights
 
 
+@tf.function(jit_compile=True)
 def compute_ess(weights: tf.Tensor) -> tf.Tensor:
     """
     Compute Effective Sample Size (ESS).

@@ -3,6 +3,16 @@ Monte Carlo Filter Comparison for Multi-Target Acoustic Tracking.
 
 Compares: EKF, UKF, PF, PF-PF-LEDH, PF-PF-EDH, LEDH, EDH.
 Uses RMSE (position RMSE over time) for evaluation.
+
+GPU Support
+-----------
+This experiment supports GPU acceleration. Use --gpu flag to enable.
+TensorFlow will automatically use available GPUs when enabled.
+
+Usage:
+    python -m src.experiments.exp_Li... --gpu              # Use first GPU
+    python -m src.experiments.exp_Li... --gpu --gpu_id 1   # Use specific GPU
+    python -m src.experiments.exp_Li... --cpu              # Force CPU only
 """
 
 from __future__ import annotations
@@ -30,6 +40,114 @@ try:
     HAS_TQDM = True
 except ImportError:
     HAS_TQDM = False
+
+
+# =============================================================================
+# GPU Configuration
+# =============================================================================
+
+
+def configure_gpu(use_gpu: bool = True, gpu_id: int = 0, memory_growth: bool = True) -> str:
+    """
+    Configure TensorFlow GPU settings.
+    
+    Parameters
+    ----------
+    use_gpu : bool
+        Whether to use GPU (if available).
+    gpu_id : int
+        Which GPU to use (if multiple available).
+    memory_growth : bool
+        Enable memory growth to avoid OOM errors.
+        
+    Returns
+    -------
+    str
+        Description of the device being used.
+    """
+    gpus = tf.config.list_physical_devices('GPU')
+    
+    if not use_gpu or not gpus:
+        # Force CPU-only mode
+        tf.config.set_visible_devices([], 'GPU')
+        return "CPU"
+    
+    try:
+        # Select specific GPU if multiple available
+        if gpu_id < len(gpus):
+            tf.config.set_visible_devices(gpus[gpu_id], 'GPU')
+            selected_gpu = gpus[gpu_id]
+        else:
+            selected_gpu = gpus[0]
+            
+        # Enable memory growth to prevent TF from allocating all GPU memory
+        if memory_growth:
+            tf.config.experimental.set_memory_growth(selected_gpu, True)
+            
+        # Get GPU name for logging
+        gpu_details = tf.config.experimental.get_device_details(selected_gpu)
+        gpu_name = gpu_details.get('device_name', f'GPU:{gpu_id}')
+        
+        return f"GPU: {gpu_name}"
+        
+    except RuntimeError as e:
+        print(f"GPU configuration error: {e}")
+        print("Falling back to CPU")
+        tf.config.set_visible_devices([], 'GPU')
+        return "CPU (fallback)"
+
+
+def get_device_info() -> dict:
+    """
+    Get information about available compute devices.
+    
+    Returns
+    -------
+    dict
+        Device information including GPUs, CPUs, and memory.
+    """
+    info = {
+        'gpus': [],
+        'cpus': tf.config.list_physical_devices('CPU'),
+        'gpu_available': False,
+        'cuda_version': None,
+    }
+    
+    gpus = tf.config.list_physical_devices('GPU')
+    info['gpu_available'] = len(gpus) > 0
+    
+    for i, gpu in enumerate(gpus):
+        try:
+            details = tf.config.experimental.get_device_details(gpu)
+            info['gpus'].append({
+                'id': i,
+                'name': details.get('device_name', f'GPU:{i}'),
+                'compute_capability': details.get('compute_capability', 'unknown'),
+            })
+        except Exception:
+            info['gpus'].append({'id': i, 'name': f'GPU:{i}'})
+    
+    # Try to get CUDA version
+    try:
+        info['cuda_version'] = tf.sysconfig.get_build_info().get('cuda_version', 'unknown')
+    except Exception:
+        pass
+        
+    return info
+
+
+def print_device_info(device_str: str):
+    """Print device configuration information."""
+    info = get_device_info()
+    print(f"Device: {device_str}")
+    if info['gpu_available']:
+        print(f"Available GPUs: {len(info['gpus'])}")
+        for gpu in info['gpus']:
+            print(f"  [{gpu['id']}] {gpu['name']}")
+        if info['cuda_version']:
+            print(f"CUDA Version: {info['cuda_version']}")
+    else:
+        print("No GPU available - using CPU")
 
 
 def parse_args():
@@ -70,6 +188,18 @@ def parse_args():
     parser.add_argument('--show_inner_progress', action='store_true')
     parser.add_argument('--plot_particles', action='store_true')
     parser.add_argument('--plot_std', action='store_true')
+    
+    # GPU configuration
+    parser.add_argument('--gpu', action='store_true', 
+                        help='Enable GPU acceleration (if available)')
+    parser.add_argument('--cpu', action='store_true',
+                        help='Force CPU-only mode (overrides --gpu)')
+    parser.add_argument('--gpu_id', type=int, default=0,
+                        help='GPU device ID to use (default: 0)')
+    parser.add_argument('--no_memory_growth', action='store_true',
+                        help='Disable GPU memory growth (allocate all GPU memory)')
+    parser.add_argument('--mixed_precision', action='store_true',
+                        help='Enable mixed precision (float16) for faster GPU computation')
 
     return parser.parse_args()
 
@@ -456,10 +586,14 @@ def run_single_trajectory(
 
 
 def run_monte_carlo(args):
-    """Main Monte Carlo loop (sequential, TF-only, RMSE only)."""
+    """Main Monte Carlo loop (sequential, TF-only, RMSE only, GPU-compatible)."""
     tf.random.set_seed(args.seed)
     outdir = Path(args.output_dir)
     outdir.mkdir(parents=True, exist_ok=True)
+    
+    # Get device info for logging
+    device_info = get_device_info()
+    use_gpu = args.gpu and not args.cpu and device_info['gpu_available']
 
     ssm_gen = MultiTargetAcousticSSM(
         num_targets=args.num_targets,
@@ -564,14 +698,29 @@ def run_monte_carlo(args):
             var_ess = var_ess / tf.maximum(count, 1.0)
             summary[f]['ess_std_time_series'] = tf.sqrt(tf.maximum(var_ess, 0.0)).numpy().tolist()
 
+    # Add experiment configuration to summary
+    summary['_config'] = {
+        'n_trajectories': args.n_trajectories,
+        'n_runs': args.n_runs,
+        'n_steps': args.n_steps,
+        'num_targets': args.num_targets,
+        'num_sensors': args.num_sensors,
+        'n_particles': args.n_particles,
+        'pf_particles': args.pf_particles,
+        'gpu_used': use_gpu,
+        'device': 'GPU' if use_gpu else 'CPU',
+        'gpu_info': device_info['gpus'] if use_gpu else None,
+    }
+    
     with open(outdir / 'summary.json', 'w') as fh:
         json.dump(summary, fh, indent=2)
 
     # Build and save Monte Carlo summary as text
+    device_label = 'GPU' if use_gpu else 'CPU'
     lines = [
         '',
         '=' * 80,
-        'Monte Carlo Results Summary (RMSE only, TF)',
+        f'Monte Carlo Results Summary (RMSE only, TF, {device_label})',
         '=' * 80,
     ]
     for f in args.filters:
@@ -623,13 +772,38 @@ def run_monte_carlo(args):
 
 if __name__ == '__main__':
     args = parse_args()
+    
+    # Configure GPU/CPU before any TensorFlow operations
+    use_gpu = args.gpu and not args.cpu
+    device_str = configure_gpu(
+        use_gpu=use_gpu,
+        gpu_id=args.gpu_id,
+        memory_growth=not args.no_memory_growth
+    )
+    
+    # Enable mixed precision if requested (can speed up GPU computation)
+    if args.mixed_precision and use_gpu:
+        try:
+            tf.keras.mixed_precision.set_global_policy('mixed_float16')
+            print("Mixed precision (float16) enabled")
+        except Exception as e:
+            print(f"Mixed precision not available: {e}")
+    
     print('=' * 80)
     print('Monte Carlo Multi-Target Filter Comparison (TF only, RMSE)')
     print('=' * 80)
+    print_device_info(device_str)
+    print('-' * 80)
     print(f'Filters: {", ".join(args.filters)}')
     print(f'Targets: {args.num_targets}, Sensors: {args.num_sensors}')
     print(f'Trajectories: {args.n_trajectories}, Runs: {args.n_runs}, Steps: {args.n_steps}')
     print(f'Particles: {args.n_particles}, PF particles: {args.pf_particles}')
     print(f'Lambda steps - LEDH: {args.n_lambda_ledh}, EDH: {args.n_lambda_edh}')
     print('=' * 80)
+    
+    # Run with timing
+    start_time = time.time()
     run_monte_carlo(args)
+    total_time = time.time() - start_time
+    print(f'\nTotal experiment time: {total_time:.2f}s ({total_time/60:.2f} min)')
+    print(f'Device used: {device_str}')

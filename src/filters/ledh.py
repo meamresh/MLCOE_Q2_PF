@@ -1,10 +1,37 @@
 """
-Corrected Algorithm 2: Local Exact Flow Daum-Huang Filter (LEDH).
+Local Exact Daum-Huang Filter (LEDH) - Algorithm 2 from Daum & Huang.
 
-Key corrections:
-- Proper λ-dependence in A_i matrix: A_i = -½ P H_i^T (λ H_i P H_i^T + R)^{-1} H_i
-- Proper b_i vector: b_i = (I + 2λA_i)[(I + λA_i) P H_i^T R^{-1} z + A_i x̄]
-- Vectorized per-particle computations (local linearization at each x^i)
+This module implements the Local EDH particle flow filter, which uses
+per-particle linearization for more accurate flow computation in
+highly nonlinear systems.
+
+The flow equation for each particle i is: dx_i/dλ = A_i(λ)x_i + b_i(λ)
+
+Key equations (local linearization at each particle):
+    A_i(λ) = -½ P H_i^T (λ H_i P H_i^T + R)^{-1} H_i
+    b_i(λ) = (I + 2λA_i)[(I + λA_i) P H_i^T R^{-1} (z - e_i) + A_i x̄]
+    
+where:
+    - P: Common prior covariance (from EKF/UKF)
+    - H_i: Local measurement Jacobian at particle i
+    - R: Measurement noise covariance
+    - z: Measurement vector  
+    - e_i: Local linearization offset h(x_i) - H_i @ x_i
+
+LEDH vs EDH:
+    - EDH: Global linearization (all particles share same A, b)
+    - LEDH: Local linearization (each particle has its own A_i, b_i)
+    
+LEDH is more accurate for non-Gaussian posteriors but computationally
+more expensive (O(N) matrix operations vs O(1) for EDH).
+
+All per-particle computations are vectorized using tf.einsum for efficiency.
+
+References
+----------
+- Daum, F., & Huang, J. (2008, 2011). Particle flow papers.
+- Li, Y., & Coates, M. (2017). "Particle Filtering with Invertible Particle Flow."
+
 """
 
 from __future__ import annotations
@@ -19,6 +46,45 @@ try:
     HAS_TQDM = True
 except ImportError:
     HAS_TQDM = False
+
+
+# =============================================================================
+# JIT-compiled utility functions
+# =============================================================================
+
+
+@tf.function(jit_compile=True)
+def _wrap_angles_batch(angles: tf.Tensor) -> tf.Tensor:
+    """Wrap angles to [-π, π] range for a batch."""
+    return tf.math.atan2(tf.sin(angles), tf.cos(angles))
+
+
+@tf.function
+def _compute_local_velocities(
+    A_batch: tf.Tensor,
+    b_batch: tf.Tensor,
+    particles: tf.Tensor
+) -> tf.Tensor:
+    """
+    Compute local flow velocities for all particles.
+    
+    v_i = A_i @ x_i + b_i (vectorized)
+    
+    Parameters
+    ----------
+    A_batch : tf.Tensor
+        Per-particle flow matrices (N, state_dim, state_dim).
+    b_batch : tf.Tensor
+        Per-particle flow vectors (N, state_dim).
+    particles : tf.Tensor
+        Particle positions (N, state_dim).
+        
+    Returns
+    -------
+    tf.Tensor
+        Velocities (N, state_dim).
+    """
+    return tf.einsum('nij,nj->ni', A_batch, particles) + b_batch
 
 
 class LEDH:

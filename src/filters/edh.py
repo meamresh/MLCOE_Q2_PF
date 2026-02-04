@@ -1,10 +1,33 @@
 """
-Corrected Algorithm 1: Exact Flow Daum-Huang Filter (EDH).
+Exact Flow Daum-Huang Filter (EDH) - Algorithm 1 from Daum & Huang (2008).
 
-Key corrections:
-- Proper λ-dependence in A matrix: A = -½ P H^T (λ H P H^T + R)^{-1} H
-- Proper b vector: b = (I + 2λA)[(I + λA) P H^T R^{-1} z + A x̄]
-- Handle empty landmarks gracefully
+This module implements the Exact Daum-Huang particle flow filter, which
+transforms particles from prior to posterior using a continuous-time ODE.
+
+The flow equation is: dx/dλ = A(λ)x + b(λ) for λ ∈ [0, 1]
+
+Key equations (corrected for proper λ-dependence):
+    A(λ) = -½ P H^T (λ H P H^T + R)^{-1} H
+    b(λ) = (I + 2λA)[(I + λA) P H^T R^{-1} (z - e_λ) + A x̄]
+    
+where:
+    - P: Prior covariance (from EKF/UKF prediction)
+    - H: Measurement Jacobian at linearization point
+    - R: Measurement noise covariance
+    - z: Measurement vector
+    - e_λ: Linearization offset h(x̄) - H @ x̄
+    - x̄: Linearization point (global for EDH)
+
+EDH uses global linearization - all particles share the same A and b matrices,
+which is computationally efficient but less accurate for highly non-Gaussian
+posteriors compared to LEDH (Local EDH).
+
+References
+----------
+- Daum, F., & Huang, J. (2008). "Particle flow for nonlinear filters with 
+  log-homotopy." SPIE Defense + Commercial Sensing.
+- Li, Y., & Coates, M. (2017). "Particle Filtering with Invertible Particle Flow."
+
 """
 
 from __future__ import annotations
@@ -19,6 +42,56 @@ try:
     HAS_TQDM = True
 except ImportError:
     HAS_TQDM = False
+
+
+# =============================================================================
+# JIT-compiled utility functions for numerical stability
+# =============================================================================
+
+
+@tf.function(jit_compile=True)
+def _wrap_angle(angle: tf.Tensor) -> tf.Tensor:
+    """Wrap angle to [-π, π] range."""
+    return tf.math.atan2(tf.sin(angle), tf.cos(angle))
+
+
+@tf.function(jit_compile=True)
+def _symmetrize_matrix(M: tf.Tensor) -> tf.Tensor:
+    """Symmetrize a matrix: M = 0.5 * (M + M^T)."""
+    return 0.5 * (M + tf.transpose(M))
+
+
+@tf.function
+def _compute_flow_velocity_batch(
+    A: tf.Tensor,
+    b: tf.Tensor,
+    particles: tf.Tensor,
+    epsilon_j: float
+) -> tf.Tensor:
+    """
+    Compute particle velocities and apply Euler integration step.
+    
+    v = A @ x + b
+    x_new = x + ε * v
+    
+    Parameters
+    ----------
+    A : tf.Tensor
+        Flow matrix (state_dim, state_dim).
+    b : tf.Tensor
+        Flow vector (state_dim,).
+    particles : tf.Tensor
+        Particle positions (N, state_dim).
+    epsilon_j : float
+        Step size.
+        
+    Returns
+    -------
+    tf.Tensor
+        Updated particles (N, state_dim).
+    """
+    velocities = particles @ tf.transpose(A) + b
+    return particles + epsilon_j * velocities
 
 
 class EDH:

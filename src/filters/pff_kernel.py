@@ -1,16 +1,52 @@
 """
-Implementation of Particle Flow Filter (PFF) following Hu & van Leeuwen (2021).
+Particle Flow Filter (PFF) - Hu & van Leeuwen (2021).
+
+Implementation of the kernel-based particle flow filter for high-dimensional
+nonlinear state estimation. Unlike importance sampling methods, PFF maintains
+equal weights throughout by deterministically flowing particles from prior
+to posterior.
 
 Paper: "A particle flow filter for high-dimensional system applications"
        Quarterly Journal of the Royal Meteorological Society, 2021
        DOI: 10.1002/qj.4028
 
-Key equations:
-- Flow field: Eq. (6) with D = B (localized prior covariance)
-- Integration: Eq. (7) - forward Euler in pseudo-time
-- Scalar kernel: Eq. (16)-(19)
-- Matrix kernel: Eq. (20)-(23)
-- Localization: Eq. (29) - Gaussian C_ij = exp(-d_ij^2 / r_in^2)
+Algorithm Overview
+------------------
+The PFF flows particles along a continuous path in pseudo-time s ∈ [0, 1]:
+    dx/ds = f(x, s)   where f is the flow field
+
+Key equations from the paper:
+
+1. Flow Field (Eq. 6):
+   f(x) = D @ I_f(x)
+   where D = B (localized prior covariance)
+   
+2. Scalar Kernel (Eq. 16-19):
+   k(x,z) = exp(-0.5 * (x-z)ᵀ A (x-z)),  A = (αB)⁻¹
+   I_f = (1/N) Σⱼ [k(xᵢ,xⱼ) ∇log p(xⱼ|y) + ∇ₓⱼ k(xⱼ,xᵢ)]
+   
+3. Diagonal/Matrix Kernel (Eq. 20-23):
+   K⁽ᵃ⁾(x,z) = exp(-0.5 * (xᵃ-zᵃ)² / (α σₐ²))
+   where σₐ² = diag(B)ₐ
+
+4. Posterior Gradient:
+   ∇log p(x|y) = ∇log p(y|x) + ∇log p(x)
+               = Hᵀ R⁻¹ (y - h(x)) - B⁻¹ (x - x̄₀)
+
+5. Localization (Eq. 29):
+   C_ij = exp(-d_ij² / r_in²)  (Gaussian taper)
+
+The flow has two components:
+- Attraction: Moves particles toward high-likelihood regions
+- Repulsion: Prevents particle collapse, maintains diversity
+
+References
+----------
+- Hu, C.-C., & van Leeuwen, P. J. (2021). "A particle flow filter for 
+  high-dimensional system applications." QJRMS.
+- Reich, S., & Cotter, C. (2015). "Probabilistic Forecasting and Bayesian
+  Data Assimilation." Cambridge University Press.
+
 """
 
 from typing import Optional, Tuple, Dict
@@ -23,11 +59,72 @@ from src.utils.linalg import localization_matrix
 tfd = tfp.distributions
 
 
-# ============================================================================
-# KERNEL FLOWS (Paper Eq. 6, 16-23)
-# ============================================================================
+# =============================================================================
+# JIT-Compiled Helper Functions
+# =============================================================================
 
-@tf.function
+
+@tf.function(jit_compile=True)
+def _compute_pairwise_distances(x: tf.Tensor, A: tf.Tensor) -> tf.Tensor:
+    """
+    Compute pairwise Mahalanobis distances: (xᵢ - xⱼ)ᵀ A (xᵢ - xⱼ).
+    
+    Parameters
+    ----------
+    x : tf.Tensor
+        Particles (N, d).
+    A : tf.Tensor
+        Precision matrix (d, d).
+        
+    Returns
+    -------
+    tf.Tensor
+        Distance matrix (N, N).
+    """
+    delta = x[:, None, :] - x[None, :, :]  # (N, N, d)
+    Adelta = tf.einsum("ijc,cd->ijd", delta, A)  # (N, N, d)
+    return tf.reduce_sum(delta * Adelta, axis=-1)  # (N, N)
+
+
+@tf.function(jit_compile=True)
+def _compute_gaussian_kernel(quad_distances: tf.Tensor) -> tf.Tensor:
+    """
+    Compute Gaussian kernel: k(xᵢ, xⱼ) = exp(-0.5 * d²).
+    
+    Parameters
+    ----------
+    quad_distances : tf.Tensor
+        Squared Mahalanobis distances (N, N).
+        
+    Returns
+    -------
+    tf.Tensor
+        Kernel matrix (N, N).
+    """
+    return tf.exp(-0.5 * quad_distances)
+
+
+@tf.function(jit_compile=True)
+def _wrap_bearing_residuals(residuals: tf.Tensor, N: int, meas_dim: int) -> tf.Tensor:
+    """
+    Wrap bearing angles in residuals to [-π, π].
+    
+    For range-bearing measurements, odd indices are bearings.
+    """
+    # Reshape to [N, num_landmarks, 2]
+    r3 = tf.reshape(residuals, [N, -1, 2])
+    bearings = r3[:, :, 1]
+    wrapped = tf.math.atan2(tf.sin(bearings), tf.cos(bearings))
+    r3 = tf.concat([r3[:, :, 0:1], wrapped[:, :, tf.newaxis]], axis=2)
+    return tf.reshape(r3, [N, -1])
+
+
+# =============================================================================
+# KERNEL FLOWS (Paper Eq. 6, 16-23)
+# =============================================================================
+
+
+@tf.function(jit_compile=True)
 def scalar_kernel_flow(particles: tf.Tensor,
                       grads: tf.Tensor,
                       B: tf.Tensor,
@@ -71,7 +168,7 @@ def scalar_kernel_flow(particles: tf.Tensor,
     return tf.matmul(I_f, B)
 
 
-@tf.function
+@tf.function(jit_compile=True)
 def diagonal_kernel_flow(particles: tf.Tensor,
                          grads: tf.Tensor,
                          B: tf.Tensor,
@@ -201,14 +298,31 @@ def compute_log_likelihood_gradient(particles: tf.Tensor,
     return tf.tensor_scatter_nd_add(tf.zeros((N, d), dtype=tf.float32), idxs, upd)
 
 
-@tf.function
+@tf.function(jit_compile=True)
 def compute_log_prior_gradient(particles: tf.Tensor,
                                prior_mean: tf.Tensor,
                                prior_cov_inv: tf.Tensor) -> tf.Tensor:
     """
-    Prior gradient: ∇_x log p(x) = -B^{-1} (x - x̄0)
-
-    Paper Eq. (15). Uses ensemble mean x̄0 and localized B.
+    Compute prior log-probability gradient.
+    
+    For Gaussian prior p(x) = N(x̄₀, B):
+        ∇ₓ log p(x) = -B⁻¹ (x - x̄₀)
+    
+    Paper Eq. (15).
+    
+    Parameters
+    ----------
+    particles : tf.Tensor
+        Particle positions (N, d).
+    prior_mean : tf.Tensor
+        Ensemble mean x̄₀ (d,).
+    prior_cov_inv : tf.Tensor
+        Inverse of localized prior covariance B⁻¹ (d, d).
+        
+    Returns
+    -------
+    tf.Tensor
+        Prior gradients (N, d).
     """
     x = tf.cast(particles, tf.float32)
     prior_mean = tf.cast(prior_mean, tf.float32)
@@ -395,9 +509,48 @@ def _obs_indices_for_landmarks(landmarks_or_sensors) -> tf.Tensor:
 
 class ScalarPFF:
     """
-    Scalar kernel Particle Flow Filter for sequential estimation.
-
-    Uses paper's scalar kernel (Eq. 16-19) with D=B preconditioning.
+    Scalar kernel Particle Flow Filter for sequential state estimation.
+    
+    Uses the scalar Gaussian kernel from Hu & van Leeuwen (2021), Eq. 16-19:
+        k(x,z) = exp(-0.5 * (x-z)ᵀ A (x-z))
+    where A = (αB)⁻¹ and α is the kernel bandwidth.
+    
+    The flow field is preconditioned with D = B (localized prior covariance).
+    
+    Parameters
+    ----------
+    ssm : StateSpaceModel
+        State-space model with motion_model and measurement_model methods.
+    initial_state : array-like
+        Initial state estimate (d,).
+    initial_covariance : array-like
+        Initial covariance (d, d).
+    num_particles : int, default=500
+        Number of particles.
+    step_size : float, default=0.05
+        Initial pseudo-time step Δs.
+    alpha : float or None, default=None
+        Kernel bandwidth. If None, uses α = 1/N (paper default).
+    localization_radius : float, default=4.0
+        Localization radius for covariance tapering (Eq. 29).
+        Set to 0 to disable localization.
+    convergence_tol : float, default=1e-5
+        Convergence threshold on flow magnitude ||f||.
+    max_steps : int, default=500
+        Maximum pseudo-time iterations.
+    show_progress : bool, default=False
+        Print warnings on fallback.
+        
+    Attributes
+    ----------
+    state : tf.Tensor
+        Current state estimate (particle mean).
+    P : tf.Tensor
+        Current covariance estimate.
+    particles : tf.Tensor
+        Particle ensemble (N, d).
+    ess_before_resample : float
+        Effective sample size (always N for PFF since weights are uniform).
     """
 
     def __init__(self, ssm, initial_state, initial_covariance, num_particles=500,
@@ -535,8 +688,51 @@ class ScalarPFF:
 class MatrixPFF:
     """
     Matrix-valued (diagonal) kernel Particle Flow Filter.
-
-    Uses paper's diagonal kernel (Eq. 20-23) with D=B preconditioning.
+    
+    Uses the diagonal kernel from Hu & van Leeuwen (2021), Eq. 20-23:
+        K⁽ᵃ⁾(x,z) = exp(-0.5 * (xᵃ - zᵃ)² / (α σₐ²))
+    where σₐ² = diag(B)ₐ is the prior variance of dimension a.
+    
+    The diagonal kernel treats each dimension independently, which can be
+    more appropriate for high-dimensional systems with weak cross-correlations.
+    
+    Parameters
+    ----------
+    ssm : StateSpaceModel
+        State-space model with motion_model and measurement_model methods.
+    initial_state : array-like
+        Initial state estimate (d,).
+    initial_covariance : array-like
+        Initial covariance (d, d).
+    num_particles : int, default=500
+        Number of particles.
+    step_size : float, default=0.05
+        Initial pseudo-time step Δs.
+    alpha : float or None, default=None
+        Kernel bandwidth. If None, uses α = 1/N.
+    localization_radius : float, default=4.0
+        Localization radius for covariance tapering.
+    convergence_tol : float, default=1e-5
+        Convergence threshold on flow magnitude.
+    max_steps : int, default=500
+        Maximum pseudo-time iterations.
+    show_progress : bool, default=False
+        Print warnings on fallback.
+        
+    Attributes
+    ----------
+    state : tf.Tensor
+        Current state estimate (particle mean).
+    P : tf.Tensor
+        Current covariance estimate.
+    particles : tf.Tensor
+        Particle ensemble (N, d).
+        
+    Notes
+    -----
+    The diagonal kernel is computationally cheaper than the scalar kernel
+    (O(N²d) vs O(N²d²)) and can work better when state dimensions are
+    weakly correlated.
     """
 
     def __init__(self, ssm, initial_state, initial_covariance, num_particles=500,

@@ -1,8 +1,34 @@
 """
 Particle Filter for nonlinear state estimation.
 
-This module implements the Particle Filter using Sequential Importance Resampling (SIR)
-/ Bootstrap Filter for nonlinear state-space models.
+This module implements the Bootstrap Particle Filter (BPF) using
+Sequential Importance Resampling (SIR) for nonlinear state-space models.
+
+Algorithm Overview
+------------------
+The particle filter approximates the posterior distribution p(x_k|y_{1:k})
+using a weighted set of samples (particles):
+
+    p(x_k|y_{1:k}) ≈ Σᵢ wᵢ δ(x - xᵢ)
+
+Each time step:
+1. Prediction: Propagate particles through motion model + process noise
+   xᵢ_k ~ p(x_k|x_{k-1}, u_k)
+
+2. Update: Compute importance weights from likelihood
+   wᵢ ∝ p(y_k|xᵢ_k)
+
+3. Resample: When ESS < threshold, resample to avoid weight degeneracy
+
+Key equations:
+    Log-likelihood: log p(y|x) = -0.5 * [(y-h(x))ᵀR⁻¹(y-h(x)) + log|R| + d*log(2π)]
+    ESS: N_eff = 1 / Σᵢ(wᵢ)²
+    
+References
+----------
+- Doucet, A., de Freitas, N., & Gordon, N. (2001). Sequential Monte Carlo Methods
+- Arulampalam, M. S., et al. (2002). A tutorial on particle filters
+
 """
 
 from __future__ import annotations
@@ -12,6 +38,73 @@ import tensorflow as tf
 from src.metrics.particle_filter_metrics import compute_effective_sample_size
 from src.utils.linalg import regularize_covariance, sample_from_gaussian
 from src.filters.resampling import systematic_resample, compute_ess
+
+
+# =============================================================================
+# JIT-compiled weight computation for performance
+# =============================================================================
+
+
+@tf.function(jit_compile=True)
+def _compute_log_weights_gaussian(
+    residuals: tf.Tensor,
+    R_inv: tf.Tensor,
+    log_det_R: tf.Tensor,
+    meas_dim: tf.Tensor
+) -> tf.Tensor:
+    """
+    Compute log importance weights from Gaussian likelihood.
+    
+    log w ∝ log p(y|x) = -0.5 * [d_M² + log|R| + d*log(2π)]
+    
+    where d_M² = (y - h(x))ᵀ R⁻¹ (y - h(x)) is the Mahalanobis distance.
+    
+    Parameters
+    ----------
+    residuals : tf.Tensor
+        Innovation vectors (N, meas_dim).
+    R_inv : tf.Tensor
+        Inverse measurement covariance (meas_dim, meas_dim).
+    log_det_R : tf.Tensor
+        Log determinant of R.
+    meas_dim : tf.Tensor
+        Measurement dimension.
+        
+    Returns
+    -------
+    tf.Tensor
+        Log weights (N,).
+    """
+    # Mahalanobis distance: (y-h(x))ᵀ R⁻¹ (y-h(x))
+    weighted_residuals = residuals @ R_inv
+    mahalanobis_sq = tf.reduce_sum(weighted_residuals * residuals, axis=1)
+    
+    # Log Gaussian: -0.5 * [d² + log|R| + d*log(2π)]
+    meas_dim_f = tf.cast(meas_dim, tf.float32)
+    log_weights = -0.5 * (
+        mahalanobis_sq + log_det_R + meas_dim_f * tf.math.log(2.0 * 3.141592653589793)
+    )
+    return log_weights
+
+
+@tf.function(jit_compile=True)
+def _normalize_log_weights(log_weights: tf.Tensor) -> tf.Tensor:
+    """
+    Normalize log weights using log-sum-exp trick for numerical stability.
+    
+    Parameters
+    ----------
+    log_weights : tf.Tensor
+        Unnormalized log weights (N,).
+        
+    Returns
+    -------
+    tf.Tensor
+        Normalized weights (N,), summing to 1.
+    """
+    max_log_w = tf.reduce_max(log_weights)
+    weights_unnorm = tf.exp(log_weights - max_log_w)
+    return weights_unnorm / tf.reduce_sum(weights_unnorm)
 
 
 class ParticleFilter:
