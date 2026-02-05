@@ -320,7 +320,7 @@ def compute_autocorrelation(x: tf.Tensor, nlags: int = 20) -> tf.Tensor:
     return tf.stack(acf_list)
 
 
-def test_innovation_whiteness(innovations: tf.Tensor,
+def innovation_whiteness(innovations: tf.Tensor,
                               nlags: int = 20) -> dict:
     """
     Test if innovation sequence is white (temporally uncorrelated).
@@ -420,8 +420,8 @@ def analyze_filter_consistency(true_states: tf.Tensor,
     ukf_innov_flat = tf.concat([tf.reshape(inn, [-1]) 
                                 for inn in ukf_results['innovations']], axis=0)
 
-    ekf_whiteness = test_innovation_whiteness(ekf_innov_flat)
-    ukf_whiteness = test_innovation_whiteness(ukf_innov_flat)
+    ekf_whiteness = innovation_whiteness(ekf_innov_flat)
+    ukf_whiteness = innovation_whiteness(ukf_innov_flat)
 
     # Consistency percentage (within bounds)
     ekf_nees_in_bounds = tf.logical_and(

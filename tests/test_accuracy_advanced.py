@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.metrics.accuracy import (
     compute_nis,
     compute_autocorrelation,
-    test_innovation_whiteness,
+    innovation_whiteness,
     analyze_filter_consistency
 )
 
@@ -154,7 +154,7 @@ class TestInnovationWhiteness(unittest.TestCase):
         """Test that white noise is identified as white."""
         # Generate white noise
         white_innov = tf.random.normal([200], mean=0.0, stddev=1.0, dtype=tf.float32)
-        results = test_innovation_whiteness(white_innov, nlags=20)
+        results = innovation_whiteness(white_innov, nlags=20)
         
         # Should be identified as white (or at least close)
         # Note: finite sample effects may cause slight correlation
@@ -169,7 +169,7 @@ class TestInnovationWhiteness(unittest.TestCase):
         """Test zero-mean property check."""
         # Zero-mean white noise
         white_innov = tf.random.normal([200], mean=0.0, stddev=1.0, dtype=tf.float32)
-        results = test_innovation_whiteness(white_innov)
+        results = innovation_whiteness(white_innov)
         
         # Should be approximately zero mean
         mean_abs = tf.abs(results['mean'])
@@ -178,7 +178,7 @@ class TestInnovationWhiteness(unittest.TestCase):
     def test_whiteness_autocorrelation(self):
         """Test autocorrelation computation in whiteness test."""
         white_innov = tf.random.normal([200], dtype=tf.float32)
-        results = test_innovation_whiteness(white_innov, nlags=10)
+        results = innovation_whiteness(white_innov, nlags=10)
         
         # Autocorrelation should have correct shape
         self.assertEqual(tf.shape(results['autocorrelation'])[0], 11)  # nlags + 1

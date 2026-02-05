@@ -17,7 +17,7 @@ from src.metrics.accuracy import (
     compute_per_dimension_rmse,
     compute_nis,
     compute_autocorrelation,
-    test_innovation_whiteness,
+    innovation_whiteness,
     analyze_filter_consistency,
 )
 
@@ -47,7 +47,7 @@ __all__ = [
     'compute_per_dimension_rmse',
     'compute_nis',
     'compute_autocorrelation',
-    'test_innovation_whiteness',
+    'innovation_whiteness',
     'analyze_filter_consistency',
     # Particle filter metrics
     'compute_effective_sample_size',
