@@ -11,9 +11,11 @@ This package provides implementations of various filtering algorithms:
 - PFF - Particle Flow Filters with kernel methods
 
 Also provides:
+- Base classes: BaseFilter, BaseParticleFilter
 - Resampling utilities: systematic_resample(), etc.
 """
 
+from src.filters.base import BaseFilter, BaseParticleFilter, StateSpaceModel
 from src.filters.kalman import KalmanFilter
 from src.filters.ekf import ExtendedKalmanFilter
 from src.filters.ukf import UnscentedKalmanFilter
@@ -33,6 +35,10 @@ from src.filters.resampling import (
 )
 
 __all__ = [
+    # Base classes
+    'BaseFilter',
+    'BaseParticleFilter',
+    'StateSpaceModel',
     # Filters
     'KalmanFilter',
     'ExtendedKalmanFilter',

@@ -45,68 +45,6 @@ from src.filters.resampling import systematic_resample, compute_ess
 # =============================================================================
 
 
-@tf.function(jit_compile=True)
-def _compute_log_weights_gaussian(
-    residuals: tf.Tensor,
-    R_inv: tf.Tensor,
-    log_det_R: tf.Tensor,
-    meas_dim: tf.Tensor
-) -> tf.Tensor:
-    """
-    Compute log importance weights from Gaussian likelihood.
-    
-    log w ∝ log p(y|x) = -0.5 * [d_M² + log|R| + d*log(2π)]
-    
-    where d_M² = (y - h(x))ᵀ R⁻¹ (y - h(x)) is the Mahalanobis distance.
-    
-    Parameters
-    ----------
-    residuals : tf.Tensor
-        Innovation vectors (N, meas_dim).
-    R_inv : tf.Tensor
-        Inverse measurement covariance (meas_dim, meas_dim).
-    log_det_R : tf.Tensor
-        Log determinant of R.
-    meas_dim : tf.Tensor
-        Measurement dimension.
-        
-    Returns
-    -------
-    tf.Tensor
-        Log weights (N,).
-    """
-    # Mahalanobis distance: (y-h(x))ᵀ R⁻¹ (y-h(x))
-    weighted_residuals = residuals @ R_inv
-    mahalanobis_sq = tf.reduce_sum(weighted_residuals * residuals, axis=1)
-    
-    # Log Gaussian: -0.5 * [d² + log|R| + d*log(2π)]
-    meas_dim_f = tf.cast(meas_dim, tf.float32)
-    log_weights = -0.5 * (
-        mahalanobis_sq + log_det_R + meas_dim_f * tf.math.log(2.0 * 3.141592653589793)
-    )
-    return log_weights
-
-
-@tf.function(jit_compile=True)
-def _normalize_log_weights(log_weights: tf.Tensor) -> tf.Tensor:
-    """
-    Normalize log weights using log-sum-exp trick for numerical stability.
-    
-    Parameters
-    ----------
-    log_weights : tf.Tensor
-        Unnormalized log weights (N,).
-        
-    Returns
-    -------
-    tf.Tensor
-        Normalized weights (N,), summing to 1.
-    """
-    max_log_w = tf.reduce_max(log_weights)
-    weights_unnorm = tf.exp(log_weights - max_log_w)
-    return weights_unnorm / tf.reduce_sum(weights_unnorm)
-
-
 class ParticleFilter:
     """
     Particle Filter for nonlinear state estimation.

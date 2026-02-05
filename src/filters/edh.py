@@ -44,55 +44,6 @@ except ImportError:
     HAS_TQDM = False
 
 
-# =============================================================================
-# JIT-compiled utility functions for numerical stability
-# =============================================================================
-
-
-@tf.function(jit_compile=True)
-def _wrap_angle(angle: tf.Tensor) -> tf.Tensor:
-    """Wrap angle to [-π, π] range."""
-    return tf.math.atan2(tf.sin(angle), tf.cos(angle))
-
-
-@tf.function(jit_compile=True)
-def _symmetrize_matrix(M: tf.Tensor) -> tf.Tensor:
-    """Symmetrize a matrix: M = 0.5 * (M + M^T)."""
-    return 0.5 * (M + tf.transpose(M))
-
-
-@tf.function
-def _compute_flow_velocity_batch(
-    A: tf.Tensor,
-    b: tf.Tensor,
-    particles: tf.Tensor,
-    epsilon_j: float
-) -> tf.Tensor:
-    """
-    Compute particle velocities and apply Euler integration step.
-    
-    v = A @ x + b
-    x_new = x + ε * v
-    
-    Parameters
-    ----------
-    A : tf.Tensor
-        Flow matrix (state_dim, state_dim).
-    b : tf.Tensor
-        Flow vector (state_dim,).
-    particles : tf.Tensor
-        Particle positions (N, state_dim).
-    epsilon_j : float
-        Step size.
-        
-    Returns
-    -------
-    tf.Tensor
-        Updated particles (N, state_dim).
-    """
-    velocities = particles @ tf.transpose(A) + b
-    return particles + epsilon_j * velocities
-
 
 class EDH:
     """Corrected Exact Flow Filter with proper λ-dependence."""

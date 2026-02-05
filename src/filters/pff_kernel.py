@@ -60,66 +60,6 @@ tfd = tfp.distributions
 
 
 # =============================================================================
-# JIT-Compiled Helper Functions
-# =============================================================================
-
-
-@tf.function(jit_compile=True)
-def _compute_pairwise_distances(x: tf.Tensor, A: tf.Tensor) -> tf.Tensor:
-    """
-    Compute pairwise Mahalanobis distances: (xᵢ - xⱼ)ᵀ A (xᵢ - xⱼ).
-    
-    Parameters
-    ----------
-    x : tf.Tensor
-        Particles (N, d).
-    A : tf.Tensor
-        Precision matrix (d, d).
-        
-    Returns
-    -------
-    tf.Tensor
-        Distance matrix (N, N).
-    """
-    delta = x[:, None, :] - x[None, :, :]  # (N, N, d)
-    Adelta = tf.einsum("ijc,cd->ijd", delta, A)  # (N, N, d)
-    return tf.reduce_sum(delta * Adelta, axis=-1)  # (N, N)
-
-
-@tf.function(jit_compile=True)
-def _compute_gaussian_kernel(quad_distances: tf.Tensor) -> tf.Tensor:
-    """
-    Compute Gaussian kernel: k(xᵢ, xⱼ) = exp(-0.5 * d²).
-    
-    Parameters
-    ----------
-    quad_distances : tf.Tensor
-        Squared Mahalanobis distances (N, N).
-        
-    Returns
-    -------
-    tf.Tensor
-        Kernel matrix (N, N).
-    """
-    return tf.exp(-0.5 * quad_distances)
-
-
-@tf.function(jit_compile=True)
-def _wrap_bearing_residuals(residuals: tf.Tensor, N: int, meas_dim: int) -> tf.Tensor:
-    """
-    Wrap bearing angles in residuals to [-π, π].
-    
-    For range-bearing measurements, odd indices are bearings.
-    """
-    # Reshape to [N, num_landmarks, 2]
-    r3 = tf.reshape(residuals, [N, -1, 2])
-    bearings = r3[:, :, 1]
-    wrapped = tf.math.atan2(tf.sin(bearings), tf.cos(bearings))
-    r3 = tf.concat([r3[:, :, 0:1], wrapped[:, :, tf.newaxis]], axis=2)
-    return tf.reshape(r3, [N, -1])
-
-
-# =============================================================================
 # KERNEL FLOWS (Paper Eq. 6, 16-23)
 # =============================================================================
 

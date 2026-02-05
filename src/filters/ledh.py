@@ -48,43 +48,6 @@ except ImportError:
     HAS_TQDM = False
 
 
-# =============================================================================
-# JIT-compiled utility functions
-# =============================================================================
-
-
-@tf.function(jit_compile=True)
-def _wrap_angles_batch(angles: tf.Tensor) -> tf.Tensor:
-    """Wrap angles to [-π, π] range for a batch."""
-    return tf.math.atan2(tf.sin(angles), tf.cos(angles))
-
-
-@tf.function
-def _compute_local_velocities(
-    A_batch: tf.Tensor,
-    b_batch: tf.Tensor,
-    particles: tf.Tensor
-) -> tf.Tensor:
-    """
-    Compute local flow velocities for all particles.
-    
-    v_i = A_i @ x_i + b_i (vectorized)
-    
-    Parameters
-    ----------
-    A_batch : tf.Tensor
-        Per-particle flow matrices (N, state_dim, state_dim).
-    b_batch : tf.Tensor
-        Per-particle flow vectors (N, state_dim).
-    particles : tf.Tensor
-        Particle positions (N, state_dim).
-        
-    Returns
-    -------
-    tf.Tensor
-        Velocities (N, state_dim).
-    """
-    return tf.einsum('nij,nj->ni', A_batch, particles) + b_batch
 
 
 class LEDH:

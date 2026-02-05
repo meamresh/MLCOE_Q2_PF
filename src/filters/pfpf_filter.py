@@ -148,8 +148,8 @@ def _compute_flow_matrix_A(
     return -0.5 * tf.einsum('...ij,...jk,...kl,...lm->...im', P, H_T, S_inv, H)
 
 
-@tf.function(jit_compile=True)
-def _compute_flow_vector_b(
+@tf.function
+def _compute_flow_vector_b_batch(
     I_plus_lambda_A: tf.Tensor,
     I_plus_2lambda_A: tf.Tensor,
     P: tf.Tensor,
@@ -160,7 +160,7 @@ def _compute_flow_vector_b(
     eta: tf.Tensor
 ) -> tf.Tensor:
     """
-    Compute the flow vector b for particle velocity.
+    Compute the flow vector b for particle velocity (batched version).
     
     The velocity is: dx/dλ = A*x + b
     
@@ -169,139 +169,45 @@ def _compute_flow_vector_b(
     Parameters
     ----------
     I_plus_lambda_A : tf.Tensor
-        Identity + λ * A matrix.
+        Identity + λ * A matrices (batch, n, n).
     I_plus_2lambda_A : tf.Tensor
-        Identity + 2λ * A matrix.
+        Identity + 2λ * A matrices (batch, n, n).
     P : tf.Tensor
-        Prior covariance.
+        Prior covariances (batch, n, n).
     H_T : tf.Tensor
-        Transposed measurement Jacobian.
+        Transposed measurement Jacobians (batch, n, m).
     R_inv : tf.Tensor
-        Inverse measurement noise covariance.
+        Inverse measurement noise covariance (m, m).
     z_minus_e : tf.Tensor
-        Measurement minus linearization offset.
+        Measurement minus linearization offset (batch, m).
     A : tf.Tensor
-        Flow matrix.
+        Flow matrices (batch, n, n).
     eta : tf.Tensor
-        Linearization point.
+        Linearization points (batch, n).
         
     Returns
     -------
     tf.Tensor
-        Flow vector b.
+        Flow vectors b (batch, n).
     """
     # term1 = (I + λA) * P * H^T * R^{-1} * (z - e)
-    z_col = z_minus_e[..., tf.newaxis]
-    temp = R_inv @ z_col
-    temp = H_T @ temp
-    temp = P @ temp
-    term1 = tf.squeeze(I_plus_lambda_A @ temp, axis=-1)
+    z_col = z_minus_e[:, :, tf.newaxis]  # (batch, m, 1)
+    temp = tf.matmul(R_inv[tf.newaxis, :, :], z_col)  # (batch, m, 1)
+    temp = tf.matmul(H_T, temp)  # (batch, n, 1)
+    temp = tf.matmul(P, temp)  # (batch, n, 1)
+    term1 = tf.squeeze(tf.matmul(I_plus_lambda_A, temp), axis=2)  # (batch, n)
     
     # term2 = A * η̄
-    term2 = tf.linalg.matvec(A, eta)
+    term2 = tf.einsum('bij,bj->bi', A, eta)  # (batch, n)
     
     # b = (I + 2λA) * (term1 + term2)
-    return tf.linalg.matvec(I_plus_2lambda_A, term1 + term2)
-
-
-@tf.function(jit_compile=True)
-def _apply_velocity_clipping(
-    velocities: tf.Tensor,
-    max_velocity: tf.Tensor
-) -> tf.Tensor:
-    """Clip velocities to prevent numerical explosion."""
-    return tf.clip_by_value(velocities, -max_velocity, max_velocity)
-
-
-@tf.function(jit_compile=True)
-def _compute_jacobian_log_det(
-    J_step: tf.Tensor
-) -> tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
-    """
-    Compute log determinant of Jacobian for invertibility check.
-    
-    Returns
-    -------
-    signs : tf.Tensor
-        Signs of determinants.
-    log_dets : tf.Tensor
-        Log absolute determinants.
-    is_valid : tf.Tensor
-        Boolean mask for valid (positive, finite) determinants.
-    """
-    signs, log_dets = tf.linalg.slogdet(J_step)
-    is_negative = signs < 0.0
-    is_finite = tf.math.is_finite(log_dets)
-    is_valid = ~is_negative & is_finite
-    return signs, log_dets, is_valid
+    term_sum = term1 + term2
+    return tf.squeeze(tf.matmul(I_plus_2lambda_A, term_sum[:, :, tf.newaxis]), axis=2)
 
 
 # =============================================================================
 # LEDH Flow Core Computations (JIT-compiled inner loops)
 # =============================================================================
-
-
-@tf.function
-def _ledh_compute_innovation_covariance(
-    H_batch: tf.Tensor,
-    P_preds: tf.Tensor,
-    R_full: tf.Tensor,
-    lambda_k: float,
-    meas_dim: int
-) -> tuple[tf.Tensor, tf.Tensor]:
-    """
-    Compute innovation covariance S_λ = λ * H * P * H^T + R for LEDH.
-    
-    Parameters
-    ----------
-    H_batch : tf.Tensor
-        Measurement Jacobians for all particles (N, m, n).
-    P_preds : tf.Tensor
-        Predicted covariances for all particles (N, n, n).
-    R_full : tf.Tensor
-        Full measurement noise covariance (m, m).
-    lambda_k : float
-        Current pseudo-time value.
-    meas_dim : int
-        Measurement dimension.
-        
-    Returns
-    -------
-    S_lambda_batch : tf.Tensor
-        Innovation covariances (N, m, m).
-    S_inv_batch : tf.Tensor
-        Inverse innovation covariances (N, m, m).
-    """
-    # H^T for batch
-    H_T = tf.transpose(H_batch, [0, 2, 1])
-    
-    # HPH^T = H @ P @ H^T (batched)
-    HPH = tf.einsum('bij,bjk,bkl->bil', H_batch, P_preds, H_T)
-    
-    # S_λ = λ * HPH^T + R
-    S_lambda_batch = lambda_k * HPH + R_full[tf.newaxis, :, :]
-    
-    # Adaptive regularization based on eigenvalues
-    eigvals_S = tf.linalg.eigvalsh(S_lambda_batch)
-    min_eigvals_S = tf.reduce_min(eigvals_S, axis=1)
-    reg = tf.where(
-        min_eigvals_S < 1e-6,
-        tf.maximum(1e-5, tf.abs(min_eigvals_S) * 0.1),
-        tf.where(lambda_k > 0.1, 1e-6, 1e-5)
-    )
-    
-    # Add regularization
-    reg_expanded = reg[:, tf.newaxis, tf.newaxis]
-    S_lambda_batch = S_lambda_batch + reg_expanded * tf.eye(
-        meas_dim, dtype=tf.float32)[tf.newaxis, :, :]
-    
-    # Invert with fallback to pseudo-inverse
-    try:
-        S_inv_batch = tf.linalg.inv(S_lambda_batch)
-    except Exception:
-        S_inv_batch = tf.linalg.pinv(S_lambda_batch)
-    
-    return S_lambda_batch, S_inv_batch
 
 
 @tf.function
@@ -334,54 +240,6 @@ def _ledh_compute_flow_velocity_batch(
     """
     velocities = tf.einsum('bij,bj->bi', A_batch, particles) + b_batch
     return tf.clip_by_value(velocities, -max_velocity, max_velocity)
-
-
-@tf.function
-def _ledh_update_particles(
-    particles: tf.Tensor,
-    velocities: tf.Tensor,
-    epsilon_j: float,
-    state_dim: int,
-    valid_mask: tf.Tensor
-) -> tf.Tensor:
-    """
-    Update particle positions with Euler integration and angle wrapping.
-    
-    x_new = x + ε * velocity
-    
-    Parameters
-    ----------
-    particles : tf.Tensor
-        Current particles (N, n).
-    velocities : tf.Tensor
-        Velocities (N, n).
-    epsilon_j : float
-        Step size.
-    state_dim : int
-        State dimension.
-    valid_mask : tf.Tensor
-        Boolean mask for valid particles (N,).
-        
-    Returns
-    -------
-    tf.Tensor
-        Updated particles (N, n).
-    """
-    new_particles = particles + epsilon_j * velocities
-    
-    # Wrap angles if state has orientation component
-    if state_dim > 2:
-        angles = new_particles[:, 2]
-        angles_wrapped = _wrap_angles(angles)
-        new_particles = tf.concat([
-            new_particles[:, :2],
-            angles_wrapped[:, tf.newaxis],
-            new_particles[:, 3:] if state_dim > 3 else tf.zeros(
-                [tf.shape(new_particles)[0], 0], dtype=tf.float32)
-        ], axis=1)
-    
-    # Only update valid particles
-    return tf.where(valid_mask[:, tf.newaxis], new_particles, particles)
 
 
 # =============================================================================
@@ -742,8 +600,7 @@ class PFPFLEDHFilter:
             # -----------------------------------------------------------------
             # Step 4: Compute flow matrix A = -0.5 * P * H^T * S^{-1} * H
             # -----------------------------------------------------------------
-            A_batch = -0.5 * tf.einsum(
-                'bij,bjk,bkl,blm->bim', P_preds, H_T, S_inv_batch, H_batch)
+            A_batch = _compute_flow_matrix_A(P_preds, H_T, S_inv_batch, H_batch)
             
             is_finite_A = tf.reduce_all(tf.math.is_finite(A_batch), axis=[1, 2])
             valid_A_mask = valid_S_mask & is_finite_A
@@ -798,35 +655,21 @@ class PFPFLEDHFilter:
             
             z_minus_e_batch = tf.clip_by_value(z_minus_e_batch, -100.0, 100.0)
             
-            # Compute b = (I + 2λA) * [(I + λA) * P * H^T * R^{-1} * (z-e) + A*η̄]
-            z_minus_e_col = z_minus_e_batch[:, :, tf.newaxis]
-            temp1 = tf.matmul(R_inv[tf.newaxis, :, :], z_minus_e_col)
-            temp2 = tf.matmul(H_T, temp1)
-            temp3 = tf.matmul(P_preds, temp2)
-            term1 = tf.squeeze(tf.matmul(I_plus_lambda_A, temp3), axis=2)
-            term2 = tf.einsum('bij,bj->bi', A_batch, eta_bars)
-            
-            is_finite_terms = (
-                tf.reduce_all(tf.math.is_finite(term1), axis=1) &
-                tf.reduce_all(tf.math.is_finite(term2), axis=1))
-            valid_terms_mask = valid_I_mask & is_finite_terms
-            
-            if not tf.reduce_any(valid_terms_mask):
-                terms_failures = valid_I_mask & (~is_finite_terms)
-                if tf.reduce_any(terms_failures):
-                    log_det_jacobians.assign(tf.where(
-                        terms_failures & (~is_already_failed),
-                        tf.constant(-1e10, dtype=tf.float32), log_det_jacobians))
-                continue
-            
-            term_sum = term1 + term2
-            b_batch = tf.squeeze(tf.matmul(
-                I_plus_2lambda_A, term_sum[:, :, tf.newaxis]), axis=2)
+            # Compute b using helper function
+            # b = (I + 2λA) * [(I + λA) * P * H^T * R^{-1} * (z-e) + A*η̄]
+            b_batch = _compute_flow_vector_b_batch(
+                I_plus_lambda_A, I_plus_2lambda_A, P_preds, H_T,
+                R_inv, z_minus_e_batch, A_batch, eta_bars)
             
             is_finite_b = tf.reduce_all(tf.math.is_finite(b_batch), axis=1)
-            valid_b_mask = valid_terms_mask & is_finite_b
+            valid_b_mask = valid_I_mask & is_finite_b
             
             if not tf.reduce_any(valid_b_mask):
+                b_failures = valid_I_mask & (~is_finite_b)
+                if tf.reduce_any(b_failures):
+                    log_det_jacobians.assign(tf.where(
+                        b_failures & (~is_already_failed),
+                        tf.constant(-1e10, dtype=tf.float32), log_det_jacobians))
                 continue
             
             # -----------------------------------------------------------------
@@ -863,10 +706,8 @@ class PFPFLEDHFilter:
                     ], axis=0)
             
             # Compute and clip velocities: v = A @ x + b
-            velocities_batch = (
-                tf.einsum('bij,bj->bi', A_batch, self.particles) + b_batch)
-            velocities_batch = tf.clip_by_value(
-                velocities_batch, -max_velocity, max_velocity)
+            velocities_batch = _ledh_compute_flow_velocity_batch(
+                A_batch, self.particles, b_batch, max_velocity)
             
             is_finite_velocity = tf.reduce_all(
                 tf.math.is_finite(velocities_batch), axis=1)

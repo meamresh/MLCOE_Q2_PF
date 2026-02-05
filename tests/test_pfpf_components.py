@@ -8,10 +8,8 @@ computation. These tests help identify bugs at the component level.
 Test Categories:
 1. Utility Functions: _wrap_angles, _to_tensor, _get_shape_dim
 2. Mathematical Operations: Mahalanobis distance, Gaussian log prob
-3. Flow Computations: Flow matrix A, flow vector b, velocity clipping
-4. Jacobian Computations: Log determinant, invertibility checks
-5. Covariance Operations: Innovation covariance, regularization
-6. Integration Tests: Full flow step, multiple particles
+3. Flow Computations: Flow matrix A, flow vector b (batched)
+4. Integration Tests: Full flow step, multiple particles
 """
 
 import unittest
@@ -29,9 +27,7 @@ from src.filters.pfpf_filter import (
     _compute_mahalanobis_batch,
     _compute_gaussian_log_prob,
     _compute_flow_matrix_A,
-    _compute_flow_vector_b,
-    _apply_velocity_clipping,
-    _compute_jacobian_log_det,
+    _compute_flow_vector_b_batch,
     _to_tensor,
     _get_shape_dim,
 )
@@ -281,122 +277,181 @@ class TestFlowMatrixA(unittest.TestCase):
         self.assertEqual(A.shape, (batch_size, self.state_dim, self.state_dim))
 
 
-class TestVelocityClipping(unittest.TestCase):
-    """Tests for velocity clipping function."""
+class TestFlowVectorBBatch(unittest.TestCase):
+    """Tests for batched flow vector b computation.
     
-    def test_velocity_clipping_no_change(self):
-        """Velocities within range should be unchanged."""
-        velocities = tf.constant([[1.0, -1.0], [0.5, -0.5]], dtype=tf.float32)
-        max_vel = tf.constant(10.0, dtype=tf.float32)
-        
-        clipped = _apply_velocity_clipping(velocities, max_vel)
-        
-        np.testing.assert_allclose(clipped.numpy(), velocities.numpy(), atol=1e-10)
+    The flow vector b is part of the velocity equation: dx/dλ = A*x + b
     
-    def test_velocity_clipping_positive_overflow(self):
-        """Large positive velocities should be clipped."""
-        velocities = tf.constant([[100.0, 50.0]], dtype=tf.float32)
-        max_vel = tf.constant(10.0, dtype=tf.float32)
-        
-        clipped = _apply_velocity_clipping(velocities, max_vel)
-        
-        expected = tf.constant([[10.0, 10.0]], dtype=tf.float32)
-        np.testing.assert_allclose(clipped.numpy(), expected.numpy(), atol=1e-10)
-    
-    def test_velocity_clipping_negative_overflow(self):
-        """Large negative velocities should be clipped."""
-        velocities = tf.constant([[-100.0, -50.0]], dtype=tf.float32)
-        max_vel = tf.constant(10.0, dtype=tf.float32)
-        
-        clipped = _apply_velocity_clipping(velocities, max_vel)
-        
-        expected = tf.constant([[-10.0, -10.0]], dtype=tf.float32)
-        np.testing.assert_allclose(clipped.numpy(), expected.numpy(), atol=1e-10)
-    
-    def test_velocity_clipping_mixed(self):
-        """Test mixed values with some clipping."""
-        velocities = tf.constant([[5.0, 15.0, -5.0, -15.0]], dtype=tf.float32)
-        max_vel = tf.constant(10.0, dtype=tf.float32)
-        
-        clipped = _apply_velocity_clipping(velocities, max_vel)
-        
-        expected = tf.constant([[5.0, 10.0, -5.0, -10.0]], dtype=tf.float32)
-        np.testing.assert_allclose(clipped.numpy(), expected.numpy(), atol=1e-10)
-
-
-class TestJacobianLogDet(unittest.TestCase):
-    """Tests for Jacobian log determinant computation.
-    
-    NOTE: These tests may fail with jit_compile=True because tf.linalg.slogdet
-    is not supported by XLA on all platforms. The tests use a non-JIT version
-    for testing the logic.
+    b = (I + 2λA) * [(I + λA) * P * H^T * R^{-1} * (z - e) + A * η̄]
     """
     
     def setUp(self):
         """Set up test fixtures."""
         tf.random.set_seed(42)
+        self.state_dim = 3
+        self.meas_dim = 2
+        self.batch_size = 5
     
-    def _compute_jacobian_log_det_no_jit(self, J_step):
-        """Non-JIT version for testing (slogdet doesn't work with XLA)."""
-        signs, log_dets = tf.linalg.slogdet(J_step)
-        is_negative = signs < 0.0
-        is_finite = tf.math.is_finite(log_dets)
-        is_valid = ~is_negative & is_finite
-        return signs, log_dets, is_valid
+    def test_flow_vector_b_batch_shape(self):
+        """Output shape should be (batch, state_dim)."""
+        # Create batch inputs
+        I_plus_lambda_A = tf.tile(
+            tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :],
+            [self.batch_size, 1, 1]
+        )
+        I_plus_2lambda_A = tf.tile(
+            tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :],
+            [self.batch_size, 1, 1]
+        )
+        P = tf.tile(
+            tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :],
+            [self.batch_size, 1, 1]
+        )
+        H_T = tf.random.normal([self.batch_size, self.state_dim, self.meas_dim], dtype=tf.float32)
+        R_inv = tf.eye(self.meas_dim, dtype=tf.float32)
+        z_minus_e = tf.random.normal([self.batch_size, self.meas_dim], dtype=tf.float32)
+        A = tf.zeros([self.batch_size, self.state_dim, self.state_dim], dtype=tf.float32)
+        eta = tf.random.normal([self.batch_size, self.state_dim], dtype=tf.float32)
+        
+        b = _compute_flow_vector_b_batch(
+            I_plus_lambda_A, I_plus_2lambda_A, P, H_T, R_inv, z_minus_e, A, eta
+        )
+        
+        self.assertEqual(b.shape, (self.batch_size, self.state_dim))
     
-    def test_jacobian_log_det_identity(self):
-        """Identity matrix should have log det = 0."""
-        J = tf.eye(3, dtype=tf.float32)[tf.newaxis, :, :]  # (1, 3, 3)
+    def test_flow_vector_b_zero_A(self):
+        """When A=0, b simplifies to P * H^T * R^{-1} * (z - e)."""
+        batch_size = 3
         
-        # Use non-JIT version since slogdet doesn't work with XLA
-        signs, log_dets, is_valid = self._compute_jacobian_log_det_no_jit(J)
+        # Identity matrices
+        I = tf.tile(
+            tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :],
+            [batch_size, 1, 1]
+        )
+        P = tf.tile(
+            2.0 * tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :],
+            [batch_size, 1, 1]
+        )
         
-        np.testing.assert_allclose(log_dets.numpy()[0], 0.0, atol=1e-6)
-        self.assertEqual(signs.numpy()[0], 1.0)
-        self.assertTrue(is_valid.numpy()[0])
+        # H = [[1, 0, 0], [0, 1, 0]] - measures first two states
+        H = tf.constant([[1., 0., 0.], [0., 1., 0.]], dtype=tf.float32)
+        H_T = tf.tile(tf.transpose(H)[tf.newaxis, :, :], [batch_size, 1, 1])
+        
+        R_inv = tf.eye(self.meas_dim, dtype=tf.float32)
+        z_minus_e = tf.constant([[1., 2.], [0., 0.], [-1., 1.]], dtype=tf.float32)
+        A = tf.zeros([batch_size, self.state_dim, self.state_dim], dtype=tf.float32)
+        eta = tf.random.normal([batch_size, self.state_dim], dtype=tf.float32)
+        
+        # When A=0, I + λA = I + 2λA = I
+        # b = I * [I * P * H^T * R^{-1} * (z-e) + 0 * η] = P * H^T * R^{-1} * (z-e)
+        b = _compute_flow_vector_b_batch(I, I, P, H_T, R_inv, z_minus_e, A, eta)
+        
+        # Manual calculation: b = P @ H^T @ R_inv @ z_minus_e
+        # P = 2*I, H^T = [[1,0], [0,1], [0,0]], R_inv = I
+        # For z_minus_e = [1, 2]: P @ H^T @ z_minus_e = 2*[1, 2, 0] = [2, 4, 0]
+        expected_0 = np.array([2., 4., 0.])
+        expected_1 = np.array([0., 0., 0.])
+        expected_2 = np.array([-2., 2., 0.])
+        
+        np.testing.assert_allclose(b[0].numpy(), expected_0, atol=1e-5)
+        np.testing.assert_allclose(b[1].numpy(), expected_1, atol=1e-5)
+        np.testing.assert_allclose(b[2].numpy(), expected_2, atol=1e-5)
     
-    def test_jacobian_log_det_scaled_identity(self):
-        """Scaled identity should have log det = n * log(scale)."""
-        scale = 2.0
-        J = scale * tf.eye(3, dtype=tf.float32)[tf.newaxis, :, :]
+    def test_flow_vector_b_zero_measurement_innovation(self):
+        """When z - e = 0, b depends only on A * eta term."""
+        batch_size = 2
         
-        signs, log_dets, is_valid = self._compute_jacobian_log_det_no_jit(J)
+        I = tf.tile(
+            tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :],
+            [batch_size, 1, 1]
+        )
+        P = tf.tile(
+            tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :],
+            [batch_size, 1, 1]
+        )
+        H_T = tf.random.normal([batch_size, self.state_dim, self.meas_dim], dtype=tf.float32)
+        R_inv = tf.eye(self.meas_dim, dtype=tf.float32)
+        z_minus_e = tf.zeros([batch_size, self.meas_dim], dtype=tf.float32)  # zero innovation
         
-        expected_log_det = 3.0 * np.log(scale)
-        np.testing.assert_allclose(log_dets.numpy()[0], expected_log_det, atol=1e-5)
-        self.assertTrue(is_valid.numpy()[0])
+        # Simple A matrix
+        A = tf.constant([
+            [[0.1, 0., 0.], [0., 0.2, 0.], [0., 0., 0.3]],
+            [[-0.1, 0., 0.], [0., -0.2, 0.], [0., 0., -0.3]]
+        ], dtype=tf.float32)
+        
+        eta = tf.constant([[1., 2., 3.], [4., 5., 6.]], dtype=tf.float32)
+        
+        # With z_minus_e = 0, b = (I + 2λA) * A * η
+        # For λ = 0, I + 2λA = I, so b = A * η
+        b = _compute_flow_vector_b_batch(I, I, P, H_T, R_inv, z_minus_e, A, eta)
+        
+        # Manual: A @ eta for each batch
+        expected_0 = np.array([0.1*1, 0.2*2, 0.3*3])  # [0.1, 0.4, 0.9]
+        expected_1 = np.array([-0.1*4, -0.2*5, -0.3*6])  # [-0.4, -1.0, -1.8]
+        
+        np.testing.assert_allclose(b[0].numpy(), expected_0, atol=1e-5)
+        np.testing.assert_allclose(b[1].numpy(), expected_1, atol=1e-5)
     
-    def test_jacobian_log_det_negative_det(self):
-        """Negative determinant should be flagged as invalid."""
-        # Matrix with negative determinant (reflection)
-        J = tf.constant([[[-1.0, 0.0], [0.0, 1.0]]], dtype=tf.float32)
+    def test_flow_vector_b_lambda_scaling(self):
+        """Test that different λ values scale the matrices correctly."""
+        batch_size = 1
+        lambda_val = 0.5
         
-        signs, log_dets, is_valid = self._compute_jacobian_log_det_no_jit(J)
+        # Simple diagonal A
+        A = tf.constant([[[-0.2, 0., 0.], [0., -0.2, 0.], [0., 0., -0.2]]], dtype=tf.float32)
+        I = tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :]
         
-        self.assertEqual(signs.numpy()[0], -1.0)
-        self.assertFalse(is_valid.numpy()[0])
+        # I + λA and I + 2λA
+        I_plus_lambda_A = I + lambda_val * A
+        I_plus_2lambda_A = I + 2 * lambda_val * A
+        
+        P = tf.tile(tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :], [batch_size, 1, 1])
+        H = tf.constant([[1., 0., 0.], [0., 1., 0.]], dtype=tf.float32)
+        H_T = tf.tile(tf.transpose(H)[tf.newaxis, :, :], [batch_size, 1, 1])
+        R_inv = tf.eye(self.meas_dim, dtype=tf.float32)
+        z_minus_e = tf.constant([[1., 1.]], dtype=tf.float32)
+        eta = tf.zeros([batch_size, self.state_dim], dtype=tf.float32)
+        
+        b = _compute_flow_vector_b_batch(
+            I_plus_lambda_A, I_plus_2lambda_A, P, H_T, R_inv, z_minus_e, A, eta
+        )
+        
+        # Result should be valid vector
+        self.assertEqual(b.shape, (batch_size, self.state_dim))
+        self.assertTrue(tf.reduce_all(tf.math.is_finite(b)))
     
-    def test_jacobian_log_det_batch(self):
-        """Test batched computation."""
-        batch_size = 10
-        J = tf.eye(3, dtype=tf.float32)[tf.newaxis, :, :] + \
-            0.1 * tf.random.normal([batch_size, 3, 3], dtype=tf.float32)
+    def test_flow_vector_b_consistency_across_batch(self):
+        """Identical inputs across batch should produce identical outputs."""
+        batch_size = 4
         
-        signs, log_dets, is_valid = self._compute_jacobian_log_det_no_jit(J)
+        # Create identical matrices for all batches
+        A_single = tf.constant([[-0.1, 0., 0.], [0., -0.1, 0.], [0., 0., -0.1]], dtype=tf.float32)
+        A = tf.tile(A_single[tf.newaxis, :, :], [batch_size, 1, 1])
         
-        self.assertEqual(signs.shape, (batch_size,))
-        self.assertEqual(log_dets.shape, (batch_size,))
-        self.assertEqual(is_valid.shape, (batch_size,))
-    
-    def test_jacobian_log_det_singular(self):
-        """Near-singular matrix should give large negative log det."""
-        # Nearly singular matrix
-        J = tf.constant([[[1.0, 0.0], [1.0, 1e-10]]], dtype=tf.float32)
+        I = tf.tile(tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :], [batch_size, 1, 1])
+        lambda_val = 0.25
+        I_plus_lambda_A = I + lambda_val * A
+        I_plus_2lambda_A = I + 2 * lambda_val * A
         
-        signs, log_dets, is_valid = self._compute_jacobian_log_det_no_jit(J)
+        P = tf.tile(tf.eye(self.state_dim, dtype=tf.float32)[tf.newaxis, :, :], [batch_size, 1, 1])
+        H = tf.constant([[1., 0., 0.], [0., 1., 0.]], dtype=tf.float32)
+        H_T = tf.tile(tf.transpose(H)[tf.newaxis, :, :], [batch_size, 1, 1])
+        R_inv = tf.eye(self.meas_dim, dtype=tf.float32)
         
-        # Log det should be very negative (close to -inf for singular)
-        self.assertLess(log_dets.numpy()[0], -10.0)
+        # Same innovation for all particles
+        z_minus_e_single = tf.constant([1., 2.], dtype=tf.float32)
+        z_minus_e = tf.tile(z_minus_e_single[tf.newaxis, :], [batch_size, 1])
+        
+        eta_single = tf.constant([0.5, 0.5, 0.5], dtype=tf.float32)
+        eta = tf.tile(eta_single[tf.newaxis, :], [batch_size, 1])
+        
+        b = _compute_flow_vector_b_batch(
+            I_plus_lambda_A, I_plus_2lambda_A, P, H_T, R_inv, z_minus_e, A, eta
+        )
+        
+        # All batch elements should be identical
+        for i in range(1, batch_size):
+            np.testing.assert_allclose(b[0].numpy(), b[i].numpy(), atol=1e-6)
 
 
 class TestToTensor(unittest.TestCase):

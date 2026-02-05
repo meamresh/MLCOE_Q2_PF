@@ -1,0 +1,126 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "particle-flow-filters"
+version = "0.1.0"
+description = "Particle Flow Filters for nonlinear state estimation"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Amresh Verma"}
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = [
+    "particle filter",
+    "kalman filter",
+    "state estimation",
+    "sequential monte carlo",
+    "particle flow",
+    "daum-huang",
+    "tensorflow",
+]
+dependencies = [
+    "tensorflow>=2.16.0,<3.0.0",
+    "tensorflow-probability>=0.24.0,<1.0.0",
+    "matplotlib>=3.9.0,<4.0.0",
+    "tqdm>=4.65.0,<5.0.0",
+    "PyYAML>=6.0.0,<7.0.0",
+    # Note: numpy is a transitive dependency of tensorflow
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+docs = [
+    "sphinx>=6.0.0",
+    "sphinx-rtd-theme>=1.2.0",
+    "myst-parser>=1.0.0",
+]
+gpu-mac = [
+    "tensorflow-metal>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/amreshverma/particle-flow-filters"
+Documentation = "https://github.com/amreshverma/particle-flow-filters#readme"
+Repository = "https://github.com/amreshverma/particle-flow-filters"
+Issues = "https://github.com/amreshverma/particle-flow-filters/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+    | \.git
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+    | __pycache__
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["src"]
+skip = [".git", ".venv", "__pycache__", "build", "dist"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["tests", "build", "dist"]
