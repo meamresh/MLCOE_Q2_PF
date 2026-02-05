@@ -97,6 +97,7 @@ skip = [".git", ".venv", "__pycache__", "build", "dist"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"

@@ -37,12 +37,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest pytest-cov
+          pip install -e .  # Install package in editable mode for imports
 
       - name: Run tests
         run: |
           python -m pytest tests/ -v --tb=short
         env:
           TF_CPP_MIN_LOG_LEVEL: "2"
+          PYTHONPATH: ${{ github.workspace }}
 
       - name: Run tests with coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
@@ -50,6 +52,7 @@ jobs:
           python -m pytest tests/ --cov=src --cov-report=xml --cov-report=term-missing
         env:
           TF_CPP_MIN_LOG_LEVEL: "2"
+          PYTHONPATH: ${{ github.workspace }}
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
