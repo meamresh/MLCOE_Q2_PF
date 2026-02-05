@@ -3,7 +3,7 @@
 
 # Core ML framework (includes numpy as dependency)
 tensorflow>=2.16.0,<3.0.0
-tensorflow-probability>=0.24.0,<1.0.0
+tensorflow-probability[tf]>=0.24.0,<1.0.0  # [tf] extra includes tf_keras
 
 # Visualization
 matplotlib>=3.9.0,<4.0.0
