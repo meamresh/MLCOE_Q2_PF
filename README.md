@@ -167,8 +167,8 @@ python -m unittest tests.test_advanced_filters.TestEDH -v
 ### Quick Install
 ```bash
 # Clone the repository
-git clone https://github.com/amreshverma/particle-flow-filters.git
-cd particle-flow-filters
+git clone https://github.com/meamresh/MLCOE_Q2_PF.git
+cd MLCOE_Q2_PF
 
 # Install dependencies
 pip install -r requirements.txt
