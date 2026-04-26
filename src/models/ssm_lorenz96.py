@@ -14,6 +14,7 @@ class Lorenz96Model:
     """Lorenz-96 chaotic dynamical system (vectorized TensorFlow)."""
 
     def __init__(self, dim=40, F=8.0, dt=0.05):
+        """State dimension *dim*, forcing *F*, and RK4 step *dt* for L96 integration."""
         self.dim = dim
         self.F = F
         self.dt = dt

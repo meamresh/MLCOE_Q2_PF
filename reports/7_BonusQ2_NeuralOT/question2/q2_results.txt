@@ -1,0 +1,45 @@
+==========================================================================================
+QUESTION 2: What Context Variables Avoid Re-Training?
+==========================================================================================
+
+  Sinkhorn reference LL: -223.72
+
+  Config                        Train MSE     Test MSE      OOD MSE    Filter LL
+  ----------------------------------------------------------------------------
+  Full context                   0.000040     0.000046     0.000297   -217388.66
+  No theta (dims 0,1)            0.000041     0.000059     0.000059   -260047.58
+  No timestep (dim 2)            0.000048     0.000056     0.000383   -178114.02
+  No observation (dim 3)         0.000042     0.000675     0.000899   -154003.05
+  No ESS (dim 4)                 0.000057     0.000074     0.000510      -203.26
+  No epsilon (dim 5)             0.000039     0.000038     0.000260   -138065.02
+  No theta+t+y_t                 0.000059     0.000068     0.000068   -360439.12
+  Particles only                 0.000085     0.000122     0.000122   -369626.22
+
+------------------------------------------------------------------------------------------
+ANALYSIS: Impact of removing each context variable
+------------------------------------------------------------------------------------------
+  No theta (dims 0,1)         MSE increase: +0.000013 (+29.0%)  Impact: HIGH
+  No timestep (dim 2)         MSE increase: +0.000010 (+21.9%)  Impact: HIGH
+  No observation (dim 3)      MSE increase: +0.000629 (+1364.7%)  Impact: CRITICAL
+  No ESS (dim 4)              MSE increase: +0.000027 (+59.6%)  Impact: CRITICAL
+  No epsilon (dim 5)          MSE increase: -0.000008 (-17.6%)  Impact: LOW
+  No theta+t+y_t              MSE increase: +0.000022 (+46.7%)  Impact: HIGH
+  Particles only              MSE increase: +0.000076 (+164.7%)  Impact: CRITICAL
+
+==========================================================================================
+CONCLUSION: Required context variables to avoid re-training
+==========================================================================================
+  MANDATORY (>20% MSE increase if removed):
+    - Context removed: No observation (dim 3)
+    - Context removed: Particles only
+    - Context removed: No ESS (dim 4)
+    - Context removed: No theta+t+y_t
+    - Context removed: No theta (dims 0,1)
+    - Context removed: No timestep (dim 2)
+  RECOMMENDED (5-20% MSE increase if removed):
+    (none in this range)
+
+  The neural network must receive at minimum: theta (model parameters),
+  timestep t, and the observation y_t to generalise across MCMC iterations
+  and particle filter timesteps without re-training.
+==========================================================================================

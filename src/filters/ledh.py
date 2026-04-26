@@ -65,6 +65,7 @@ class LEDH:
         show_progress: bool = False,
         redraw_particles: bool = False
     ):
+        """Initialise LEDH filter with prior distribution and base filter."""
         self.ssm = ssm
         self.num_particles = num_particles
         self.n_lambda = n_lambda

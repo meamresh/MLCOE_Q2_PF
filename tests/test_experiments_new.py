@@ -12,15 +12,15 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.experiments.exp_particle_degeneracy import (
+from src.experiments.exp_part1_1e_particle_degeneracy import (
     ParticleFilterDiagnostics,
     run_particle_filter_with_diagnostics
 )
-from src.experiments.exp_runtime_memory import (
+from src.experiments.exp_part1_1f_runtime_memory import (
     run_comprehensive_evaluation,
     particle_count_scaling_study
 )
-from src.experiments.exp_linearization_sigma_pt_failures import (
+from src.experiments.exp_part1_1d_linearization_sigma_pt_failures import (
     run_failure_analysis
 )
 
@@ -104,7 +104,7 @@ class TestRuntimeMemoryExperiment(unittest.TestCase):
     def test_comprehensive_evaluation_creates_outputs(self):
         """Test that comprehensive evaluation creates expected outputs."""
         import os
-        from src.experiments.exp_runtime_memory import OUTPUT_DIR
+        from src.experiments.exp_part1_1f_runtime_memory import OUTPUT_DIR
         
         # Create output directory
         output_path = Path(self.temp_dir) / "runtime_memory"
@@ -113,7 +113,7 @@ class TestRuntimeMemoryExperiment(unittest.TestCase):
         # Temporarily override OUTPUT_DIR
         original_output_dir = OUTPUT_DIR
         try:
-            import src.experiments.exp_runtime_memory as exp_module
+            import src.experiments.exp_part1_1f_runtime_memory as exp_module
             exp_module.OUTPUT_DIR = output_path
             
             # Run with minimal parameters
@@ -124,7 +124,7 @@ class TestRuntimeMemoryExperiment(unittest.TestCase):
 
     def test_particle_count_scaling_study_structure(self):
         """Test that scaling study has correct structure."""
-        from src.experiments.exp_runtime_memory import particle_count_scaling_study
+        from src.experiments.exp_part1_1f_runtime_memory import particle_count_scaling_study
         
         # Check function exists and is callable
         self.assertTrue(callable(particle_count_scaling_study))
@@ -144,7 +144,7 @@ class TestLinearizationFailuresExperiment(unittest.TestCase):
 
     def test_failure_analysis_function_exists(self):
         """Test that failure analysis function exists."""
-        from src.experiments.exp_linearization_sigma_pt_failures import run_failure_analysis
+        from src.experiments.exp_part1_1d_linearization_sigma_pt_failures import run_failure_analysis
         
         # Check function exists and is callable
         self.assertTrue(callable(run_failure_analysis))
@@ -152,7 +152,7 @@ class TestLinearizationFailuresExperiment(unittest.TestCase):
     def test_failure_analysis_creates_outputs(self):
         """Test that failure analysis creates expected outputs."""
         import os
-        from src.experiments.exp_linearization_sigma_pt_failures import OUTPUT_DIR
+        from src.experiments.exp_part1_1d_linearization_sigma_pt_failures import OUTPUT_DIR
         
         # Create output directory
         output_path = Path(self.temp_dir) / "linearization_sigma_pt_failures"
@@ -161,7 +161,7 @@ class TestLinearizationFailuresExperiment(unittest.TestCase):
         # Temporarily override OUTPUT_DIR
         original_output_dir = OUTPUT_DIR
         try:
-            import src.experiments.exp_linearization_sigma_pt_failures as exp_module
+            import src.experiments.exp_part1_1d_linearization_sigma_pt_failures as exp_module
             exp_module.OUTPUT_DIR = output_path
             
             # Check function exists
@@ -185,17 +185,17 @@ class TestExperimentIntegration(unittest.TestCase):
     def test_all_experiments_importable(self):
         """Test that all experiment modules can be imported."""
         try:
-            from src.experiments import exp_particle_degeneracy
-            from src.experiments import exp_runtime_memory
-            from src.experiments import exp_linearization_sigma_pt_failures
+            from src.experiments import exp_part1_1e_particle_degeneracy as exp_particle_degeneracy
+            from src.experiments import exp_part1_1f_runtime_memory as exp_runtime_memory
+            from src.experiments import exp_part1_1d_linearization_sigma_pt_failures as exp_linearization_sigma_pt_failures
             self.assertTrue(True)
         except ImportError as e:
             self.fail(f"Failed to import experiment modules: {e}")
 
     def test_experiment_output_directories(self):
         """Test that experiment output directories are defined."""
-        from src.experiments.exp_runtime_memory import OUTPUT_DIR
-        from src.experiments.exp_linearization_sigma_pt_failures import OUTPUT_DIR as OUTPUT_DIR2
+        from src.experiments.exp_part1_1f_runtime_memory import OUTPUT_DIR
+        from src.experiments.exp_part1_1d_linearization_sigma_pt_failures import OUTPUT_DIR as OUTPUT_DIR2
         
         # Check directories are Path objects
         self.assertIsInstance(OUTPUT_DIR, Path)

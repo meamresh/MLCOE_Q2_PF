@@ -283,6 +283,7 @@ class PFPFLEDHFilter:
     def __init__(self, ssm, initial_state, initial_cov, num_particles=500,
                  n_lambda=29, filter_type='ekf', ukf_alpha=0.001, ukf_beta=2.0,
                  show_progress=False):
+        """Initialise PFPF-LEDH; see class docstring for parameter details."""
         self.ssm = ssm
         self.num_particles = num_particles
         self.n_lambda = n_lambda
@@ -1100,6 +1101,7 @@ class PFPFEDHFilter:
     def __init__(self, ssm, initial_state, initial_cov, num_particles=500,
                  n_lambda=20, filter_type='ekf', ukf_alpha=0.001, ukf_beta=2.0,
                  show_progress=False, redraw_particles=False):
+        """Initialise PFPF-EDH; see class docstring for parameter details."""
         self.ssm = ssm
         self.num_particles = num_particles
         self.n_lambda = n_lambda
@@ -1859,5 +1861,5 @@ class PFPFEDHFilter:
 # =============================================================================
 # Usage Example (for documentation)
 # =============================================================================
-# python -m src.experiments.exp_filters_comparison_diagnostics \
+# python -m src.experiments.exp_part1_2c_filters_comparison_diagnostics \
 #     --filters pfpf_ledh pfpf_edh ledh edh pff_scalar pff_matrix

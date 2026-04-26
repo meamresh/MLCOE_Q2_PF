@@ -24,6 +24,8 @@ from src.filters.pfpf_filter import PFPFLEDHFilter, PFPFEDHFilter
 from src.filters.ledh import LEDH
 from src.filters.edh import EDH
 from src.filters.pff_kernel import ScalarPFF, MatrixPFF
+from src.filters.spf_dai_daum import DaiDaumStochasticParticleFlow, SPFConfig
+from src.filters.pfpf_dai_daum import PFPFDaiDaumFilter
 from src.filters.resampling import (
     systematic_resample,
     multinomial_resample,
@@ -50,6 +52,9 @@ __all__ = [
     'EDH',
     'ScalarPFF',
     'MatrixPFF',
+    'DaiDaumStochasticParticleFlow',
+    'PFPFDaiDaumFilter',
+    'SPFConfig',
     # Resampling
     'systematic_resample',
     'multinomial_resample',

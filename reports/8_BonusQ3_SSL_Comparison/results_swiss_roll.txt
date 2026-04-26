@@ -1,0 +1,55 @@
+8_BonusQ3_SSL_Comparison
+  dynamics=swiss_roll  T_train=100  T_test=40  N=50  seed=42  quick=False
+  pg_iters=50  dpf_hmc_samples=50  dpf_hmc_burnin=20  pmmh_outer=50
+  hmc_step_size=0.05  n_leapfrog=5  adapt=False  fix_C=True
+
+
+================================================================================
+  Results: Gaussian SSL (swiss_roll trajectory)
+================================================================================
+
+--- A. Filtering RMSE (lower is better) ---
+  Method                     RMSE
+  --------------------------------
+  Particle Gibbs           0.4411
+  DPF-HMC                  0.1789
+  PMMH                     0.2008
+
+--- B. Test Log-Likelihood (higher is better) ---
+  Method                  Test LL
+  --------------------------------
+  Particle Gibbs          -105.74
+  DPF-HMC                 -224.25
+  PMMH                    -261.66
+
+--- C. Training Log-Likelihood (final) ---
+  Method                 Train LL
+  --------------------------------
+  Particle Gibbs          -208.77
+  DPF-HMC                  347.02
+  PMMH                     -87.93
+
+--- D. Wall-Clock Time ---
+  Method                Total (s) Per iter (s)
+  --------------------------------------------
+  Particle Gibbs             92.3         1.85
+  DPF-HMC                   901.8        18.04
+  PMMH                      250.1         5.00
+
+--- E. HMC Diagnostics (DPF-HMC only) ---
+  Acceptance rate: 0.500
+  Posterior mean C:
+    [[1. 0.]
+ [0. 1.]]
+  Posterior mean b: [ 0.02244739 -0.08830394]
+  Posterior mean R_diag: [0.09807649 0.06052672]
+  True R_diag: [0.0900, 0.0900]
+
+--- F. Emission Parameter Recovery ---
+  Method                ||C - I||  ||R - 0.09I||
+  ----------------------------------------------
+  Particle Gibbs           0.0000         1.2869
+  DPF-HMC (post.mean)      0.0000         0.0306
+  PMMH                     0.0000         0.0638
+
+================================================================================

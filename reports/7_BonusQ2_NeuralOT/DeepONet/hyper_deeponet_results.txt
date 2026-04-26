@@ -1,0 +1,39 @@
+
+==========================================================================================
+  Hyper-DeepONet vs DeepONet vs mGradNet vs Sinkhorn
+==========================================================================================
+
+--- A. Log-Likelihood Accuracy ---
+  Metric                                  mGradNet     DeepONet  HyperDeepONet
+  ---------------------------------------------------------------------------
+  Pearson r vs Sinkhorn                     0.9933       0.9855         0.9861
+  Mean absolute error                      13.6225      16.7895        18.1129
+  Mean relative error                       0.0471       0.0565         0.0582
+
+--- B. Gradient Agreement ---
+  Metric                                  mGradNet     DeepONet  HyperDeepONet
+  ---------------------------------------------------------------------------
+  Cosine similarity (mean+-std)       -0.007+-0.753 0.161+-0.723   0.026+-0.846
+  Norm ratio (neural/sinkhorn)           2878.5834   66768.9273      2495.9495
+
+--- C. Runtime (forward + backward, per eval) ---
+  Method                 Mean (s)    Std (s)
+  ------------------------------------------
+  Sinkhorn                 0.7663     2.1090
+  mGradNet                 1.5864     0.1363
+  DeepONet                 1.5456     0.1541
+  Hyper-DeepONet           1.5572     0.0997
+
+--- D. Training Loss ---
+  Model                    Best MSE
+  ----------------------------------
+  mGradNet                 0.000361
+  DeepONet                 0.006420
+  Hyper-DeepONet           0.000554
+
+--- E. Parameter Count ---
+  mGradNet                 88,130
+  DeepONet                125,378
+  Hyper-DeepONet          141,890
+
+==========================================================================================

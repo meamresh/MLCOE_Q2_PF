@@ -4,6 +4,7 @@ Unit tests for advanced filters: EDH, LEDH, PFF, PFPF.
 
 import unittest
 import tensorflow as tf
+import numpy as np
 import sys
 from pathlib import Path
 
@@ -302,48 +303,97 @@ class TestPFPFEDH(unittest.TestCase):
         self.x0 = tf.constant([0.0, 0.0, 0.0], dtype=tf.float32)
         self.P0 = tf.eye(3, dtype=tf.float32) * 0.1
         self.landmarks = tf.constant([[5.0, 5.0]], dtype=tf.float32)
+        self.num_particles = 50
+
+    def _make_filter(self, n_lambda=10):
+        return PFPFEDHFilter(
+            self.ssm, self.x0, self.P0,
+            num_particles=self.num_particles, n_lambda=n_lambda,
+            show_progress=False,
+        )
 
     def test_initialization(self):
         """Test PFPF-EDH initialization."""
-        pfpf = PFPFEDHFilter(
-            self.ssm, self.x0, self.P0,
-            num_particles=50, n_lambda=10,
-            show_progress=False
-        )
-        
+        pfpf = self._make_filter()
         self.assertIsNotNone(pfpf)
 
     def test_predict_step(self):
         """Test PFPF-EDH prediction step."""
-        pfpf = PFPFEDHFilter(
-            self.ssm, self.x0, self.P0,
-            num_particles=50, n_lambda=10,
-            show_progress=False
-        )
-        
+        pfpf = self._make_filter()
         control = tf.constant([1.0, 0.1], dtype=tf.float32)
-        pfpf.predict(control)  # Updates state in place
-        
+        pfpf.predict(control)
         self.assertEqual(pfpf.state.shape, (3,))
-        # PFPF uses P attribute for covariance
         self.assertEqual(pfpf.P.shape, (3, 3))
 
     def test_update_step(self):
         """Test PFPF-EDH update step."""
-        pfpf = PFPFEDHFilter(
-            self.ssm, self.x0, self.P0,
-            num_particles=50, n_lambda=10,
-            show_progress=False
-        )
-        
+        pfpf = self._make_filter()
         z = self.ssm.measurement_model(self.x0[tf.newaxis, :], self.landmarks)[0]
-        
         control = tf.constant([1.0, 0.1], dtype=tf.float32)
         pfpf.predict(control)
-        pfpf.update(z, self.landmarks)  # Updates state in place
-        
+        pfpf.update(z, self.landmarks)
         self.assertEqual(pfpf.state.shape, (3,))
         self.assertEqual(pfpf.P.shape, (3, 3))
+
+    def test_particles_finite_after_update(self):
+        """Particles should remain finite after a predict-update cycle."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        z = self.ssm.measurement_model(pfpf.state[tf.newaxis, :], self.landmarks)[0]
+        pfpf.update(z, self.landmarks)
+        self.assertTrue(tf.reduce_all(tf.math.is_finite(pfpf.particles)))
+
+    def test_state_finite_after_update(self):
+        """State estimate should remain finite after update."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        z = self.ssm.measurement_model(pfpf.state[tf.newaxis, :], self.landmarks)[0]
+        pfpf.update(z, self.landmarks)
+        self.assertTrue(tf.reduce_all(tf.math.is_finite(pfpf.state)))
+
+    def test_weights_sum_to_one(self):
+        """Weights should sum to ~1 after normalization."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        z = self.ssm.measurement_model(pfpf.state[tf.newaxis, :], self.landmarks)[0]
+        pfpf.update(z, self.landmarks)
+        weight_sum = float(tf.reduce_sum(pfpf.weights).numpy())
+        self.assertAlmostEqual(weight_sum, 1.0, places=4)
+
+    def test_covariance_psd(self):
+        """Global covariance P should remain PSD after predict."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        eigvals = tf.linalg.eigvalsh(pfpf.P)
+        self.assertTrue(tf.reduce_all(eigvals >= -1e-5))
+
+    def test_predict_changes_particles(self):
+        """Predict should move particles from their initial positions."""
+        pfpf = self._make_filter()
+        particles_before = pfpf.particles.numpy().copy()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        self.assertFalse(
+            np.allclose(pfpf.particles.numpy(), particles_before, atol=1e-6))
+
+    def test_predict_update_sequence(self):
+        """Multi-step predict-update should remain finite and stable."""
+        pfpf = self._make_filter(n_lambda=5)
+        for _ in range(3):
+            control = tf.constant([1.0, 0.1], dtype=tf.float32)
+            pfpf.predict(control)
+            z = self.ssm.measurement_model(
+                pfpf.state[tf.newaxis, :], self.landmarks)[0]
+            pfpf.update(z, self.landmarks)
+
+        self.assertTrue(tf.reduce_all(tf.math.is_finite(pfpf.state)))
+        self.assertTrue(tf.reduce_all(tf.math.is_finite(pfpf.particles)))
+        weight_sum = float(tf.reduce_sum(pfpf.weights).numpy())
+        self.assertAlmostEqual(weight_sum, 1.0, places=4)
 
 
 class TestPFPFLEDH(unittest.TestCase):
@@ -359,49 +409,117 @@ class TestPFPFLEDH(unittest.TestCase):
         self.x0 = tf.constant([0.0, 0.0, 0.0], dtype=tf.float32)
         self.P0 = tf.eye(3, dtype=tf.float32) * 0.1
         self.landmarks = tf.constant([[5.0, 5.0]], dtype=tf.float32)
+        self.num_particles = 50
+
+    def _make_filter(self, n_lambda=10):
+        return PFPFLEDHFilter(
+            self.ssm, self.x0, self.P0,
+            num_particles=self.num_particles, n_lambda=n_lambda,
+            show_progress=False,
+        )
 
     def test_initialization(self):
         """Test PFPF-LEDH initialization."""
-        pfpf = PFPFLEDHFilter(
-            self.ssm, self.x0, self.P0,
-            num_particles=50, n_lambda=10,
-            show_progress=False
-        )
-        
+        pfpf = self._make_filter()
         self.assertIsNotNone(pfpf)
 
     def test_predict_step(self):
         """Test PFPF-LEDH prediction step."""
-        pfpf = PFPFLEDHFilter(
-            self.ssm, self.x0, self.P0,
-            num_particles=50, n_lambda=10,
-            show_progress=False
-        )
-        
+        pfpf = self._make_filter()
         control = tf.constant([1.0, 0.1], dtype=tf.float32)
-        pfpf.predict(control)  # Updates state in place
-        
+        pfpf.predict(control)
         self.assertEqual(pfpf.state.shape, (3,))
-        # PFPF-LEDH uses particle_covs (per-particle covariances)
-        self.assertEqual(pfpf.particle_covs.shape, (50, 3, 3))
+        self.assertEqual(pfpf.particle_covs.shape, (self.num_particles, 3, 3))
 
     def test_update_step(self):
         """Test PFPF-LEDH update step."""
-        pfpf = PFPFLEDHFilter(
-            self.ssm, self.x0, self.P0,
-            num_particles=50, n_lambda=10,
-            show_progress=False
-        )
-        
+        pfpf = self._make_filter()
         z = self.ssm.measurement_model(self.x0[tf.newaxis, :], self.landmarks)[0]
-        
         control = tf.constant([1.0, 0.1], dtype=tf.float32)
         pfpf.predict(control)
-        pfpf.update(z, self.landmarks)  # Updates state in place
-        
+        pfpf.update(z, self.landmarks)
         self.assertEqual(pfpf.state.shape, (3,))
-        # PFPF-LEDH uses particle_covs (per-particle covariances)
-        self.assertEqual(pfpf.particle_covs.shape, (50, 3, 3))
+        self.assertEqual(pfpf.particle_covs.shape, (self.num_particles, 3, 3))
+
+    def test_particles_finite_after_update(self):
+        """Particles should remain finite after a predict-update cycle."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        z = self.ssm.measurement_model(pfpf.state[tf.newaxis, :], self.landmarks)[0]
+        pfpf.update(z, self.landmarks)
+        self.assertTrue(tf.reduce_all(tf.math.is_finite(pfpf.particles)))
+
+    def test_state_finite_after_update(self):
+        """State estimate should remain finite after update."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        z = self.ssm.measurement_model(pfpf.state[tf.newaxis, :], self.landmarks)[0]
+        pfpf.update(z, self.landmarks)
+        self.assertTrue(tf.reduce_all(tf.math.is_finite(pfpf.state)))
+
+    def test_weights_sum_to_one(self):
+        """Weights should sum to ~1 after normalization."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        z = self.ssm.measurement_model(pfpf.state[tf.newaxis, :], self.landmarks)[0]
+        pfpf.update(z, self.landmarks)
+        weight_sum = float(tf.reduce_sum(pfpf.weights).numpy())
+        self.assertAlmostEqual(weight_sum, 1.0, places=4)
+
+    def test_weights_nonnegative(self):
+        """All weights should be non-negative."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        z = self.ssm.measurement_model(pfpf.state[tf.newaxis, :], self.landmarks)[0]
+        pfpf.update(z, self.landmarks)
+        self.assertTrue(tf.reduce_all(pfpf.weights >= 0.0))
+
+    def test_particle_covs_psd(self):
+        """Per-particle covariances should be positive semi-definite."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        eigvals = tf.linalg.eigvalsh(pfpf.particle_covs)
+        self.assertTrue(tf.reduce_all(eigvals >= -1e-5))
+
+    def test_predict_changes_particles(self):
+        """Predict should move particles from their initial positions."""
+        pfpf = self._make_filter()
+        particles_before = pfpf.particles.numpy().copy()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        self.assertFalse(
+            np.allclose(pfpf.particles.numpy(), particles_before, atol=1e-6))
+
+    def test_predict_update_sequence(self):
+        """Multi-step predict-update should remain finite and stable."""
+        pfpf = self._make_filter(n_lambda=5)
+        for _ in range(3):
+            control = tf.constant([1.0, 0.1], dtype=tf.float32)
+            pfpf.predict(control)
+            z = self.ssm.measurement_model(
+                pfpf.state[tf.newaxis, :], self.landmarks)[0]
+            pfpf.update(z, self.landmarks)
+
+        self.assertTrue(tf.reduce_all(tf.math.is_finite(pfpf.state)))
+        self.assertTrue(tf.reduce_all(tf.math.is_finite(pfpf.particles)))
+        weight_sum = float(tf.reduce_sum(pfpf.weights).numpy())
+        self.assertAlmostEqual(weight_sum, 1.0, places=4)
+
+    def test_ess_tracking(self):
+        """ESS should be tracked and be in valid range."""
+        pfpf = self._make_filter()
+        control = tf.constant([1.0, 0.1], dtype=tf.float32)
+        pfpf.predict(control)
+        z = self.ssm.measurement_model(pfpf.state[tf.newaxis, :], self.landmarks)[0]
+        pfpf.update(z, self.landmarks)
+        ess = float(pfpf.ess_before_resample.numpy())
+        self.assertGreater(ess, 0.0)
+        self.assertLessEqual(ess, float(self.num_particles))
 
 
 class TestFilterComparison(unittest.TestCase):
@@ -425,6 +543,8 @@ class TestFilterComparison(unittest.TestCase):
             LEDH(self.ssm, self.x0, self.P0, num_particles=30, n_lambda=5, show_progress=False),
             ScalarPFF(self.ssm, self.x0, self.P0, num_particles=30, max_steps=5),
             MatrixPFF(self.ssm, self.x0, self.P0, num_particles=30, max_steps=5),
+            PFPFEDHFilter(self.ssm, self.x0, self.P0, num_particles=30, n_lambda=5, show_progress=False),
+            PFPFLEDHFilter(self.ssm, self.x0, self.P0, num_particles=30, n_lambda=5, show_progress=False),
         ]
         
         control = tf.constant([1.0, 0.1], dtype=tf.float32)

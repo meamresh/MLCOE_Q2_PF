@@ -1,0 +1,9 @@
+PFPF-LEDH on PMCMCNonlinearSSM (Kitagawa)
+============================================================
+T: 80
+num_particles: 300
+n_lambda: 29
+seed: 42
+rmse: 6.650573
+mean_ess: 53.1527
+min_ess: 3.9024

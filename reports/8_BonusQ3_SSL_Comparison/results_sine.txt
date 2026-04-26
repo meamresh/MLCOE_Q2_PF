@@ -1,0 +1,55 @@
+8_BonusQ3_SSL_Comparison
+  dynamics=sine  T_train=100  T_test=40  N=50  seed=42  quick=False
+  pg_iters=50  dpf_hmc_samples=300  dpf_hmc_burnin=100  pmmh_outer=50
+  hmc_step_size=0.05  n_leapfrog=5  adapt=False  fix_C=True
+
+
+================================================================================
+  Results: Gaussian SSL (sine trajectory)
+================================================================================
+
+--- A. Filtering RMSE (lower is better) ---
+  Method                     RMSE
+  --------------------------------
+  Particle Gibbs           0.4276
+  DPF-HMC                  0.1481
+  PMMH                     0.2564
+
+--- B. Test Log-Likelihood (higher is better) ---
+  Method                  Test LL
+  --------------------------------
+  Particle Gibbs           -99.79
+  DPF-HMC                 -390.12
+  PMMH                    -509.86
+
+--- C. Training Log-Likelihood (final) ---
+  Method                 Train LL
+  --------------------------------
+  Particle Gibbs          -209.03
+  DPF-HMC                  343.00
+  PMMH                     -82.86
+
+--- D. Wall-Clock Time ---
+  Method                Total (s) Per iter (s)
+  --------------------------------------------
+  Particle Gibbs             90.9         1.82
+  DPF-HMC                  4006.6        13.36
+  PMMH                      229.2         4.58
+
+--- E. HMC Diagnostics (DPF-HMC only) ---
+  Acceptance rate: 0.527
+  Posterior mean C:
+    [[1. 0.]
+ [0. 1.]]
+  Posterior mean b: [-0.04385436 -0.13599403]
+  Posterior mean R_diag: [0.07899003 0.06733086]
+  True R_diag: [0.0900, 0.0900]
+
+--- F. Emission Parameter Recovery ---
+  Method                ||C - I||  ||R - 0.09I||
+  ----------------------------------------------
+  Particle Gibbs           0.0000         1.2869
+  DPF-HMC (post.mean)      0.0000         0.0252
+  PMMH                     0.0000         0.0827
+
+================================================================================

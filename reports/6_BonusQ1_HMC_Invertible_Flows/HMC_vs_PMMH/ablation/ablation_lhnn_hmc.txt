@@ -1,0 +1,30 @@
+========================================================================================================================
+L-HNN HMC ablation: sinkhorn_epsilon × grad_window × n_lambda
+  Metric ess/grad = ESS / total-grad-evals (training + fallback) — Table 1 of Dhulipala et al. (2022).
+  fallback = fraction of leapfrog steps using real gradients (online error monitor).
+========================================================================================================================
+config                       accept  ess_mean    ess/s   ess/grad  fallback  cost/step   bias_v   bias_w   lg_mdn  lg_mad
+------------------------------------------------------------------------------------------------------------------------
+eps=2.0,gw=1,nl=5 (baseline)    0.574       4.4    0.004  1.628e-03     0.023    1.48690   2.2191   7.5057    1.408   0.030
+eps=0.5,gw=1,nl=5             0.500       3.3    0.004  1.306e-03     0.000    7.08226   0.8182   2.4843    1.555   0.150
+eps=1.0,gw=1,nl=5             0.633       5.4    0.006  2.125e-03     0.000    7.27042   4.5026   4.5750    1.492   0.092
+eps=2.0,gw=5,nl=5             0.000       nan      nan        nan     0.008    6.95004   2.0000   0.5000    4.903   0.365
+eps=2.0,gw=1,nl=3             0.267       8.6    0.011  3.249e-03     0.083    6.24285   5.5836   3.1883    1.311   0.099
+eps=1.0,gw=1,nl=3             0.500       3.2    0.004  1.255e-03     0.000    6.08735   0.6791   1.2586    1.584   0.109
+eps=2.0,gw=0,nl=5             0.000       nan      nan        nan     0.000    7.05334   2.0000   0.5000   16.624   2.451
+------------------------------------------------------------------------------------------------------------------------
+Gradient CV across horizons:
+  eps=2.0,gw=1,nl=5 (baseline): T=10 cv=1.459  T=25 cv=0.373  T=50 cv=2.368
+  eps=0.5,gw=1,nl=5: T=10 cv=0.777  T=25 cv=0.585  T=50 cv=0.351
+  eps=1.0,gw=1,nl=5: T=10 cv=0.680  T=25 cv=0.948  T=50 cv=1.280
+  eps=2.0,gw=5,nl=5: T=10 cv=1.208  T=25 cv=2.547  T=50 cv=1.306
+  eps=2.0,gw=1,nl=3: T=10 cv=0.403  T=25 cv=1.586  T=50 cv=0.866
+  eps=1.0,gw=1,nl=3: T=10 cv=0.914  T=25 cv=1.599  T=50 cv=0.952
+  eps=2.0,gw=0,nl=5: T=10 cv=1.676  T=25 cv=2.566  T=50 cv=0.999
+------------------------------------------------------------------------------------------------------------------------
+Notes:
+  ess/grad   = mean_ESS / (lhnn_training_evals + fallback_evals).
+  fallback   = sampling fallback steps / total leapfrog steps.
+  Ablation uses the L-HNN trained on baseline config (eps=2.0,gw=1,nl=5).
+  For independent L-HNN training per config use --retrain_ablation.
+========================================================================================================================

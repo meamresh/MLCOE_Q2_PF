@@ -11,7 +11,7 @@ Supported Methods
 - Stratified: Balance between systematic and multinomial
 - Residual: Deterministic + stochastic hybrid
 
-All functions use TensorFlow only (no NumPy) and are JIT-compatible.
+All functions use TensorFlow only and are JIT-compatible.
 
 Key Concept: Effective Sample Size (ESS)
 ----------------------------------------

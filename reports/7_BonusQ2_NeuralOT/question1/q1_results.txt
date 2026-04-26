@@ -1,0 +1,42 @@
+================================================================================
+QUESTION 1: Can Neural OT Replace Iterative Sinkhorn?
+================================================================================
+
+--- A. Log-Likelihood Accuracy ---
+  Correlation (Pearson)                0.9387
+  Mean absolute error                  24.2530
+  Mean relative error                  0.0789
+  N evaluations                        30
+
+--- B. Gradient Agreement ---
+  Cosine similarity                    -0.1022 +/- 0.8948
+  Norm ratio (neural/sink)             142.3141
+
+--- C. Runtime (per filter eval, forward+backward) ---
+  Metric                                   Sinkhorn    Neural OT
+  --------------------------------------------------
+  Forward  (s)                               0.5933       0.7055
+  Backward (s)                               0.1841       1.1085
+  Total    (s)                               0.7773       1.8140
+  Speedup                                      0.43x
+
+--- D. MCMC Quality (short chains) ---
+  Metric                                   Sinkhorn    Neural OT
+  --------------------------------------------------
+  Accept rate                                 0.252        0.272
+  Mean ESS                                      4.6          8.6
+  ESS / s                                     0.003        0.001
+  HMC runtime (s)                            1601.7       7843.2
+  Bias sigma_v^2                              3.728        4.596
+  Bias sigma_w^2                              0.300        0.609
+
+--- E. Neural OT Training Cost ---
+  Training MSE                         0.000096
+  Training examples                    10000
+  Epochs                               2000
+  Sinkhorn calls saved/iter            50
+
+CONCLUSION:
+  PARTIALLY — Reasonable correlation but some accuracy loss.
+              More training data or larger networks may help.
+================================================================================

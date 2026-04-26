@@ -213,6 +213,7 @@ def compute_log_likelihood_gradient(particles: tf.Tensor,
             H = tf.reshape(H, [N, -1, d])
         else:
             def compute_H(particle):
+                """Jacobian dh/dx for one particle via autodiff on the measurement model."""
                 with tf.GradientTape() as tape:
                     particle = tf.reshape(particle, [1, -1])
                     tape.watch(particle)
@@ -496,6 +497,7 @@ class ScalarPFF:
     def __init__(self, ssm, initial_state, initial_covariance, num_particles=500,
                  step_size=0.05, alpha=None, localization_radius=4.0,
                  convergence_tol=1e-5, max_steps=500, show_progress=False):
+        """Initialise ScalarPFF; see class docstring for parameter details."""
         self.ssm = ssm
         self.num_particles = num_particles
         self.step_size = step_size
@@ -678,6 +680,7 @@ class MatrixPFF:
     def __init__(self, ssm, initial_state, initial_covariance, num_particles=500,
                  step_size=0.05, alpha=None, localization_radius=4.0,
                  convergence_tol=1e-5, max_steps=500, show_progress=False):
+        """Initialise MatrixPFF; see class docstring for parameter details."""
         self.ssm = ssm
         self.num_particles = num_particles
         self.step_size = step_size

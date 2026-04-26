@@ -55,6 +55,7 @@ class UnscentedKalmanFilter:
                  initial_covariance: tf.Tensor,
                  alpha: float = 0.01, beta: float = 1.0,
                  kappa: float | None = None) -> None:
+        """Initialise UKF and compute sigma-point weights; see class docstring."""
         self.ssm = ssm
         self.state = tf.Variable(tf.cast(initial_state, tf.float32))
         self.covariance = tf.Variable(tf.cast(initial_covariance, tf.float32))

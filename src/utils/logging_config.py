@@ -161,6 +161,7 @@ class LoggerAdapter:
     """
     
     def __init__(self, name: str):
+        """Delegate to :func:`get_logger` for module *name*."""
         self.logger = get_logger(name)
     
     def __call__(self, message: str, *args, **kwargs):
@@ -168,16 +169,21 @@ class LoggerAdapter:
         self.logger.info(message, *args, **kwargs)
     
     def debug(self, message: str, *args, **kwargs):
+        """Log at DEBUG."""
         self.logger.debug(message, *args, **kwargs)
     
     def info(self, message: str, *args, **kwargs):
+        """Log at INFO."""
         self.logger.info(message, *args, **kwargs)
     
     def warning(self, message: str, *args, **kwargs):
+        """Log at WARNING."""
         self.logger.warning(message, *args, **kwargs)
     
     def error(self, message: str, *args, **kwargs):
+        """Log at ERROR."""
         self.logger.error(message, *args, **kwargs)
     
     def critical(self, message: str, *args, **kwargs):
+        """Log at CRITICAL."""
         self.logger.critical(message, *args, **kwargs)

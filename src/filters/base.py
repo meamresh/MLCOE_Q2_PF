@@ -146,11 +146,12 @@ class BaseFilter(ABC):
     
     @property
     def state(self) -> tf.Tensor:
-        """Current state estimate."""
+        """Point estimate of the state vector, shape ``(state_dim,)``."""
         return self._state.value()
     
     @state.setter
     def state(self, value: tf.Tensor) -> None:
+        """Assign the state estimate; *value* is cast to float32 and stored in ``_state``."""
         self._state.assign(tf.cast(value, tf.float32))
     
     @property
@@ -160,11 +161,12 @@ class BaseFilter(ABC):
     
     @property
     def covariance(self) -> tf.Tensor:
-        """Current state covariance."""
+        """State uncertainty, positive semi-definite, shape ``(state_dim, state_dim)``."""
         return self._covariance.value()
     
     @covariance.setter
     def covariance(self, value: tf.Tensor) -> None:
+        """Assign the state covariance; *value* is cast to float32 and stored in ``_covariance``."""
         self._covariance.assign(tf.cast(value, tf.float32))
     
     @property
@@ -313,20 +315,22 @@ class BaseParticleFilter(BaseFilter):
     
     @property
     def particles(self) -> tf.Tensor:
-        """Current particle states."""
+        """Ensemble of particle state vectors, shape ``(num_particles, state_dim)``."""
         return self._particles.value()
     
     @particles.setter
     def particles(self, value: tf.Tensor) -> None:
+        """Assign the full particle matrix ``(num_particles, state_dim)``; cast to float32."""
         self._particles.assign(tf.cast(value, tf.float32))
     
     @property
     def weights(self) -> tf.Tensor:
-        """Current particle weights."""
+        """Non-negative importance weights, shape ``(num_particles,)`` (not necessarily normalised)."""
         return self._weights.value()
     
     @weights.setter
     def weights(self, value: tf.Tensor) -> None:
+        """Assign per-particle weights, shape ``(num_particles,)``; cast to float32."""
         self._weights.assign(tf.cast(value, tf.float32))
     
     def compute_ess(self) -> tf.Tensor:

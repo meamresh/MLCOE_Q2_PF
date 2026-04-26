@@ -1,3 +1,4 @@
+"""Kalman Filter for linear Gaussian state-space models (ABCD notation)."""
 
 # src/filters/kalman.py
 from __future__ import annotations
@@ -54,6 +55,7 @@ class KalmanFilter:
                  R: tf.Tensor | None = None,
                  B: tf.Tensor | None = None,
                  D: tf.Tensor | None = None) -> None:
+        """Initialise KalmanFilter; see class docstring for parameter details."""
         self.A = A
         self.C = C
         # Reshape x0 to (n, 1) if it's 1D

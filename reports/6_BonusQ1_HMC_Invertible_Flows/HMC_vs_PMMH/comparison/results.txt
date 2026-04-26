@@ -1,0 +1,51 @@
+=====================================================================================
+HMC (LEDH + OT-Sinkhorn)  vs  L-HNN HMC  vs  PMMH (Bootstrap PF)
+Model: Andrieu et al. (2010), Eq 14-15  |  Prior: InvGamma(0.01, 0.01)
+-------------------------------------------------------------------------------------
+Note on wall-clock vs gradient efficiency
+  L-HNN's advantage is in TARGET GRADIENT evaluations, not raw wall time.
+  On low-d problems the NN GradientTape per leapfrog step costs as much as
+  the LEDH call itself, so ESS/s may not improve even when ESS/grad does.
+  The speedup grows with d (higher-d posteriors) and with L (more leapfrog
+  steps per proposal), because the amortised training cost shrinks relative
+  to the sampling cost: savings = (L+1)×total_iters − training_evals.
+=====================================================================================
+Metric                                       PMMH       HMC-LEDH      L-HNN HMC
+-------------------------------------------------------------------------------------
+Acceptance rate                             0.142          0.580          0.586
+ESS (sigma_v^2)                               9.3            4.5            3.1
+ESS (sigma_w^2)                              14.4            6.3            4.2
+Mean ESS                                     11.9            5.4            3.7
+Runtime (s)                                  55.0         2493.4         1102.8
+ESS/s                                       0.216          0.002          0.003
+Cost per step (s/proposal)                 0.0733         3.3246         1.4704
+-------------------------------------------------------------------------------------
+Mean sigma_v^2                             10.132          9.872         11.385  (true=10.000)
+Mean sigma_w^2                              1.400          2.949          8.963  (true=1.000)
+Std sigma_v^2                               3.000          2.240          7.306
+Std sigma_w^2                               0.537          0.417          3.417
+-------------------------------------------------------------------------------------
+Quality vs ground truth:
+  RMSE (sigma_v^2       ) PMMH=3.0027  HMC=2.2439  L-HNN=7.4359
+  MAE  (sigma_v^2       ) PMMH=2.3782  HMC=1.7449  L-HNN=6.1784
+  RMSE (sigma_w^2       ) PMMH=0.6689  HMC=1.9931  L-HNN=8.6651
+  MAE  (sigma_w^2       ) PMMH=0.5126  HMC=1.9490  L-HNN=7.9631
+-------------------------------------------------------------------------------------
+Distributional agreement with PMMH (KS / W1 — lower is better):
+  sigma_v^2             HMC: KS=0.2560 W1=1.1998   L-HNN: KS=0.3640 W1=3.7969
+  sigma_w^2             HMC: KS=0.9420 W1=1.5568   L-HNN: KS=1.0000 W1=7.5482
+-------------------------------------------------------------------------------------
+L-HNN gradient cost breakdown (Dhulipala et al. 2022, Table 1 metric):
+  Training (pilot) gradient evals : 2550
+  Sampling fallback gradient evals : 170
+  Total L-HNN gradient evals       : 2720
+  Traditional HMC gradient evals   : 8250  ((L+1)×iters = (10+1)×750)
+  Gradient evals saved             : 5530 (67.0%)
+  Fallback intensity (∇ / step)    : 0.023
+  Break-even iters (train÷(L+1))   : 231  (L-HNN wins beyond this many iterations)
+-------------------------------------------------------------------------------------
+ESS per gradient evaluation (primary L-HNN efficiency metric):
+  HMC-LEDH  : 6.5362e-04
+  L-HNN HMC : 1.3426e-03
+  Speedup   : 2.05×
+=====================================================================================

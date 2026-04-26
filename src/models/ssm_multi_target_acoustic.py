@@ -112,8 +112,13 @@ class MultiTargetAcousticSSM:
             self.V_gen_single = V_single
             self.V_filter_single = V_single * process_noise_scale
 
-        self._Q_gen_cache = None
-        self._Q_filter_cache = None
+        # Build process noise covariances eagerly to avoid graph-scope issues
+        self._Q_gen_cache = self._build_block_diagonal(
+            self.V_gen_single, self.C
+        )
+        self._Q_filter_cache = self._build_block_diagonal(
+            self.V_filter_single, self.C
+        )
 
         # Measurement noise
         if meas_noise is None:
@@ -137,6 +142,21 @@ class MultiTargetAcousticSSM:
 
         self.x0_true = self._create_default_initial_states()
 
+        # Prior for particle-flow filters (Dai–Daum, PFPF-Dai): set by filter each step
+        self._prior_mean = tf.Variable(
+            tf.identity(self.x0_true),
+            trainable=False,
+            name="prior_mean",
+        )
+        self._prior_cov = tf.Variable(
+            tf.eye(self.state_dim, dtype=self.dtype) * 100.0,
+            trainable=False,
+            name="prior_cov",
+        )
+        self._R_inv_meas = tf.linalg.inv(
+            self.R + tf.eye(self.N_s, dtype=self.dtype) * 1e-8
+        )
+
     @property
     def Q(self) -> tf.Tensor:
         """Process noise covariance for filtering (lazy construction)."""
@@ -144,21 +164,93 @@ class MultiTargetAcousticSSM:
 
     @property
     def Q_gen(self) -> tf.Tensor:
-        """Process noise covariance for generation (lazy construction)."""
-        if self._Q_gen_cache is None:
-            self._Q_gen_cache = self._build_block_diagonal(
-                self.V_gen_single, self.C
-            )
+        """Process noise covariance for generation (precomputed)."""
         return self._Q_gen_cache
 
     @property
     def Q_filter(self) -> tf.Tensor:
-        """Process noise covariance for filtering (lazy construction)."""
-        if self._Q_filter_cache is None:
-            self._Q_filter_cache = self._build_block_diagonal(
-                self.V_filter_single, self.C
-            )
+        """Process noise covariance for filtering (precomputed)."""
         return self._Q_filter_cache
+
+    @property
+    def prior_mean(self) -> tf.Tensor:
+        """Prior mean of length ``state_dim``; EKF/flow code may assign after predict."""
+        return self._prior_mean.value()
+
+    @prior_mean.setter
+    def prior_mean(self, value: tf.Tensor) -> None:
+        """Set the prior mean vector; reshaped to ``(state_dim,)`` in model dtype."""
+        self._prior_mean.assign(tf.reshape(tf.cast(value, self.dtype), [self.state_dim]))
+
+    @property
+    def prior_cov(self) -> tf.Tensor:
+        """Prior covariance of shape ``(state_dim, state_dim)``; set by the filter as needed."""
+        return self._prior_cov.value()
+
+    @prior_cov.setter
+    def prior_cov(self, value: tf.Tensor) -> None:
+        """Set the prior covariance; reshaped to ``(state_dim, state_dim)`` in model dtype."""
+        self._prior_cov.assign(
+            tf.reshape(tf.cast(value, self.dtype), [self.state_dim, self.state_dim])
+        )
+
+    def log_prior(self, x: tf.Tensor) -> tf.Tensor:
+        """Log prior density log p0(x). x: (state_dim,) or (batch, state_dim)."""
+        x = tf.cast(x, self.dtype)
+        m = self.prior_mean
+        P = self.prior_cov
+        P_inv = tf.linalg.inv(P + tf.eye(self.state_dim, dtype=self.dtype) * 1e-8)
+        if x.shape.rank == 1:
+            d = x - m
+            return -0.5 * tf.reduce_sum(d * tf.linalg.matvec(P_inv, d))
+        d = x - m[tf.newaxis, :]
+        return -0.5 * tf.reduce_sum(d * (d @ tf.transpose(P_inv)), axis=1)
+
+    def gradient_log_prior(self, x: tf.Tensor) -> tf.Tensor:
+        """Gradient of log prior w.r.t. x. x: (state_dim,)."""
+        x = tf.cast(x, self.dtype)
+        P_inv = tf.linalg.inv(
+            self.prior_cov + tf.eye(self.state_dim, dtype=self.dtype) * 1e-8
+        )
+        return -tf.linalg.matvec(P_inv, x - self.prior_mean)
+
+    def hessian_log_prior(self, x: tf.Tensor) -> tf.Tensor:
+        """Hessian of log prior (constant). Returns (state_dim, state_dim)."""
+        _ = tf.cast(x, self.dtype)
+        return -tf.linalg.inv(
+            self.prior_cov + tf.eye(self.state_dim, dtype=self.dtype) * 1e-8
+        )
+
+    def log_likelihood(self, x: tf.Tensor, z: tf.Tensor) -> tf.Tensor:
+        """Log measurement likelihood log p(z|x). x: (state_dim,), z: (N_s,)."""
+        x = tf.cast(x, self.dtype)
+        z = tf.cast(z, self.dtype)
+        h = self.measurement_model(x)
+        if h.shape.rank == 0:
+            h = h[tf.newaxis]
+        res = z - h
+        return -0.5 * tf.reduce_sum(res * tf.linalg.matvec(self._R_inv_meas, res))
+
+    def gradient_log_likelihood(self, x: tf.Tensor, z: tf.Tensor) -> tf.Tensor:
+        """Gradient of log p(z|x) w.r.t. x."""
+        x = tf.cast(x, self.dtype)
+        z = tf.cast(z, self.dtype)
+        with tf.GradientTape() as tape:
+            tape.watch(x)
+            ll = self.log_likelihood(x, z)
+        return tape.gradient(ll, x)
+
+    def hessian_log_likelihood(self, x: tf.Tensor, z: tf.Tensor) -> tf.Tensor:
+        """Hessian of log p(z|x) w.r.t. x. Returns (state_dim, state_dim)."""
+        x = tf.cast(x, self.dtype)
+        z = tf.cast(z, self.dtype)
+        with tf.GradientTape() as outer_tape:
+            outer_tape.watch(x)
+            with tf.GradientTape() as inner_tape:
+                inner_tape.watch(x)
+                ll = self.log_likelihood(x, z)
+            grad = inner_tape.gradient(ll, x)
+        return outer_tape.jacobian(grad, x)
 
     def _build_block_diagonal(
         self, block: tf.Tensor, num_blocks: int

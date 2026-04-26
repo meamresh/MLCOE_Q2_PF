@@ -3,7 +3,7 @@ Example: Range-Bearing Localization with EKF and UKF.
 
 This example demonstrates basic usage of the range-bearing localization
 filters. For full experiments with parameter tuning, see
-src/experiments/exp_range_bearing_ekf_ukf.py
+src/experiments/exp_part1_1c_range_bearing_ekf_ukf.py
 """
 
 from __future__ import annotations

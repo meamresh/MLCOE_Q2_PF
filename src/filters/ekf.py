@@ -39,6 +39,7 @@ class ExtendedKalmanFilter:
 
     def __init__(self, ssm, initial_state: tf.Tensor,
                  initial_covariance: tf.Tensor) -> None:
+        """Initialise EKF; see class docstring for parameter details."""
         self.ssm = ssm
         self.state = tf.Variable(tf.cast(initial_state, tf.float32))
         self.covariance = tf.Variable(tf.cast(initial_covariance, tf.float32))

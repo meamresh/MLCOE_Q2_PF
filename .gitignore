@@ -102,9 +102,6 @@ Thumbs.db
 ehthumbs.db
 
 # Project specific
-outputs/
-results/
-logs/
 *.log
 *.json
 !configs/*.json

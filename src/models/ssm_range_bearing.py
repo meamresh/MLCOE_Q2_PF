@@ -54,6 +54,7 @@ class RangeBearingSSM:
     def __init__(self, dt: float = 0.1,
                  process_noise: tf.Tensor | None = None,
                  meas_noise: tf.Tensor | None = None) -> None:
+        """Initialise step size and optional Q/R; defaults 0.01*I_3 and 0.1*I_2 per landmark."""
         self.dt = dt
         self.state_dim = 3
         self.meas_per_landmark = 2
