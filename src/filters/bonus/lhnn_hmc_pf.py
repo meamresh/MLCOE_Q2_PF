@@ -680,6 +680,7 @@ def run_lhnn_hmc(
     lhnn_config: Optional[LHNNConfig] = None,
     # — Optional: pass a pre-trained L-HNN to skip training —
     pretrained_lhnn: Optional[LatentHNN] = None,
+    crn_offset: Optional[int] = None,
     **kwargs,
 ) -> Tuple[HMCResult, LatentHNN, LHNNHMCDiagnostics]:
     """
@@ -729,6 +730,16 @@ def run_lhnn_hmc(
         L-HNN hyper-parameters.  Defaults to ``LHNNConfig()``.
     pretrained_lhnn : LatentHNN, optional
         Skip training and use this pre-trained model directly.
+    crn_offset : int, optional
+        Optional override for the CRN seed used for *target* evaluations
+        (both the standalone ``target_log_prob_fn`` calls in this loop and
+        the fallback ``_eval_target_and_grad`` calls inside
+        :func:`_leapfrog_lhnn`).  When ``None`` the CRN seed equals the
+        chain-private ``iter_seed`` derived from ``seed`` — bit-exact
+        identical to the previous behaviour.  When set explicitly the
+        per-iteration CRN seed is ``crn_offset + (i+1)*7919``.  Used by
+        :func:`run_lhnn_hmc_multi_chain` to share the stochastic-target
+        realisation across chains; see that function's docstring.
 
     Returns
     -------
@@ -861,21 +872,24 @@ def run_lhnn_hmc(
     total_real_grads = 0     # diagnostic counter
     consecutive_full_fallback = 0  # iterations where every leapfrog step fell back
 
+    crn_base = crn_offset if crn_offset is not None else base_seed
+
     for i in range(total):
-        iter_seed = base_seed + (i + 1) * 7_919
+        iter_seed = base_seed + (i + 1) * 7_919   # chain-private (momentum, MH)
+        crn_seed = crn_base + (i + 1) * 7_919     # shared across chains when crn_offset is set
         eps = float(tf.exp(log_eps).numpy())
 
         # Re-evaluate log π(q) with THIS iteration's CRN seed before doing
         # anything else.  The particle filter is stochastic, so
         #   log π(q | seed_i)  ≠  log π(q | seed_j)
-        # lp_prop (below) also uses iter_seed, making the Metropolis ratio
+        # lp_prop (below) also uses crn_seed, making the Metropolis ratio
         #   log α = log π(q_prop | seed_i) − log π(q | seed_i)
         # a consistent estimate of the true log acceptance ratio.
         # Without this re-evaluation the comparison is apples-vs-oranges:
         # lp_cur was set with a different seed (iter_{i-1} or init_seed),
         # so log_alpha is dominated by particle-filter noise → alpha ≈ 0
         # → dual averaging drives eps to the floor on the first iteration.
-        tf.random.set_seed(iter_seed)
+        tf.random.set_seed(crn_seed)
         lp_cur_raw = target_log_prob_fn(q)
         lp_cur = tf.cast(tf.math.real(tf.cast(lp_cur_raw, tf.complex64)), tf.float32)
         lp_cur = tf.where(tf.math.is_finite(lp_cur), lp_cur, tf.constant(-1e6, tf.float32))
@@ -896,7 +910,7 @@ def run_lhnn_hmc(
             p=p,
             eps=eps,
             num_steps=L,
-            crn_seed=iter_seed,
+            crn_seed=crn_seed,
             H0_lhnn=H0_lhnn,
             error_threshold=adaptive_threshold,
             cooldown_steps=cfg.cooldown_steps,
@@ -906,7 +920,7 @@ def run_lhnn_hmc(
 
         # 4. Evaluate target at proposed position (value only, no gradient)
         #    This is the only mandatory target evaluation per iteration.
-        tf.random.set_seed(iter_seed)
+        tf.random.set_seed(crn_seed)
         lp_prop_raw = target_log_prob_fn(q_prop)
         lp_prop = tf.cast(
             tf.math.real(tf.cast(lp_prop_raw, tf.complex64)), tf.float32
@@ -1060,3 +1074,129 @@ def ess_per_gradient(
         tf.cast(total_gradient_evals, tf.float32), tf.constant(1e-12, tf.float32)
     )
     return tf.cast(mean_ess / denom, tf.float32)
+
+
+# ---------------------------------------------------------------------------
+# Multi-chain wrapper for L-HNN HMC
+# ---------------------------------------------------------------------------
+
+class MultiChainLHNNHMCResult(NamedTuple):
+    """Container for multi-chain L-HNN HMC output."""
+
+    samples: tf.Tensor          # (num_chains, num_results, d)
+    is_accepted: tf.Tensor      # (num_chains, num_results)
+    accept_rate: tf.Tensor      # (num_chains,)
+    target_log_probs: tf.Tensor # (num_chains, num_results)
+    step_sizes: tf.Tensor       # (num_chains, num_burnin + num_results)
+    per_chain_diagnostics: list # length num_chains, each LHNNHMCDiagnostics
+
+
+def run_lhnn_hmc_multi_chain(
+    target_log_prob_fn: Callable[[tf.Tensor], tf.Tensor],
+    initial_states: tf.Tensor,
+    num_results: int = 1_000,
+    num_burnin: int = 500,
+    step_size: float = 0.001,
+    num_leapfrog_steps: int = 10,
+    target_accept_prob: float = 0.45,
+    seed: Optional[int] = None,
+    verbose: bool = True,
+    adapt_step_size: bool = False,
+    lhnn_config: Optional[LHNNConfig] = None,
+    pretrained_lhnn: Optional[LatentHNN] = None,
+    share_crn_across_chains: bool = True,
+    **kwargs,
+) -> Tuple[MultiChainLHNNHMCResult, LatentHNN]:
+    """Run independent L-HNN HMC chains with dispersed initial points.
+
+    L-HNN training (the expensive one-time step) is done once on the
+    *first* chain's data; the trained network is reused as
+    ``pretrained_lhnn`` for chains 2..num_chains.  This is the same
+    "share the surrogate, vary the chain" pattern Stan uses for adapted
+    metrics across chains.
+
+    CRN policy across chains
+    ------------------------
+    The L-HNN forward pass itself is deterministic given the trained
+    weights, but the *fallback* path (real-gradient calls inside
+    :func:`_leapfrog_lhnn`) and the per-iteration accept/reject value
+    evaluations both go through the *stochastic* LEDH likelihood.  When
+    ``share_crn_across_chains=True`` (default) every chain shares the
+    same CRN seed sequence ``crn_offset = base_seed + (i+1)*7919`` so all
+    chains see the same stochastic-target realisation at iteration ``i``.
+    Each chain still has a private ``base_seed = global + 1009*(c+1)``
+    for momentum draws and MH acceptance, so chains explore
+    independently.  Without this, finite-N noise in the LEDH likelihood
+    creates per-chain local maxima that look like non-convergence to
+    R-hat.  See Report_II_Addendum_Diagnostics §4.5.
+
+    Setting ``share_crn_across_chains=False`` reverts to the legacy
+    behaviour (independent CRN per chain) — appropriate only when the
+    target is deterministic.
+
+    Parameters
+    ----------
+    initial_states : tf.Tensor, shape ``(num_chains, d)``
+        Dispersed starting points.
+    share_crn_across_chains : bool
+        See discussion above.  Default ``True``.
+    Other args forwarded to :func:`run_lhnn_hmc`.
+
+    Returns
+    -------
+    MultiChainLHNNHMCResult
+        Stacked per-chain outputs plus the diagnostics list.
+    LatentHNN
+        The trained (or pre-supplied) L-HNN network.
+    """
+    base_seed = seed if seed is not None else 42
+    num_chains = int(initial_states.shape[0])
+    shared_crn = base_seed if share_crn_across_chains else None
+
+    samples_list: list = []
+    accepted_list: list = []
+    accept_rate_list: list = []
+    lp_list: list = []
+    eps_list: list = []
+    diag_list: list = []
+
+    trained = pretrained_lhnn
+
+    for c in range(num_chains):
+        chain_seed = base_seed + 1009 * (c + 1)
+        if verbose:
+            crn_tag = f"shared({base_seed})" if share_crn_across_chains else "private"
+            print(f"\n[L-HNN HMC chain {c + 1}/{num_chains}]  seed={chain_seed}"
+                  f"  crn={crn_tag}"
+                  f"  init={initial_states[c].numpy().tolist()}")
+        result, trained, diag = run_lhnn_hmc(
+            target_log_prob_fn=target_log_prob_fn,
+            initial_state=initial_states[c],
+            num_results=num_results,
+            num_burnin=num_burnin,
+            step_size=step_size,
+            num_leapfrog_steps=num_leapfrog_steps,
+            target_accept_prob=target_accept_prob,
+            seed=chain_seed,
+            verbose=verbose,
+            adapt_step_size=adapt_step_size,
+            lhnn_config=lhnn_config,
+            pretrained_lhnn=trained,  # train once on chain 0; reuse afterwards
+            crn_offset=shared_crn,
+            **kwargs,
+        )
+        samples_list.append(result.samples)
+        accepted_list.append(result.is_accepted)
+        accept_rate_list.append(result.accept_rate)
+        lp_list.append(result.target_log_probs)
+        eps_list.append(result.step_sizes)
+        diag_list.append(diag)
+
+    return MultiChainLHNNHMCResult(
+        samples=tf.stack(samples_list, axis=0),
+        is_accepted=tf.stack(accepted_list, axis=0),
+        accept_rate=tf.stack(accept_rate_list, axis=0),
+        target_log_probs=tf.stack(lp_list, axis=0),
+        step_sizes=tf.stack(eps_list, axis=0),
+        per_chain_diagnostics=diag_list,
+    ), trained

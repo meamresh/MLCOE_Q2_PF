@@ -12,42 +12,42 @@ Note on wall-clock vs gradient efficiency
 =====================================================================================
 Metric                                       PMMH       HMC-LEDH      L-HNN HMC
 -------------------------------------------------------------------------------------
-Acceptance rate                             0.098          0.598          0.610
-ESS (sigma_v^2)                              36.0            5.2           10.5
-ESS (sigma_w^2)                              34.0            5.5            4.0
-Mean ESS                                     35.0            5.3            7.2
-Runtime (s)                                 440.5        22422.0         5460.2
-ESS/s                                       0.080          0.000          0.001
-Cost per step (s/proposal)                 0.0734         3.7370         0.9100
+Acceptance rate                             0.151          0.582          0.571
+ESS (sigma_v^2)                               7.2            5.2            8.1
+ESS (sigma_w^2)                               6.0            3.8            7.4
+Mean ESS                                      6.6            4.5            7.8
+Runtime (s)                                 245.2        10181.2         1488.3
+ESS/s                                       0.027          0.000          0.005
+Cost per step (s/proposal)                 0.0766         3.1816         0.4651
 -------------------------------------------------------------------------------------
-Mean sigma_v^2                              7.836          9.404          5.976  (true=10.000)
-Mean sigma_w^2                              1.435          3.118         11.619  (true=1.000)
-Std sigma_v^2                               2.278          5.310          1.884
-Std sigma_w^2                               0.387          2.311          7.226
+Mean sigma_v^2                              8.442         17.006          1.326  (true=10.000)
+Mean sigma_w^2                              1.515          4.404         10.962  (true=1.000)
+Std sigma_v^2                               2.497         21.352          0.857
+Std sigma_w^2                               0.572          2.787          3.106
 -------------------------------------------------------------------------------------
 Quality vs ground truth:
-  RMSE (sigma_v^2       ) PMMH=3.1425  HMC=5.3436  L-HNN=4.4431
-  MAE  (sigma_v^2       ) PMMH=2.7769  HMC=4.8150  L-HNN=4.0714
-  RMSE (sigma_w^2       ) PMMH=0.5826  HMC=3.1344  L-HNN=12.8448
-  MAE  (sigma_w^2       ) PMMH=0.4625  HMC=2.1177  L-HNN=10.6194
+  RMSE (sigma_v^2       ) PMMH=2.9433  HMC=22.4724  L-HNN=8.7167
+  MAE  (sigma_v^2       ) PMMH=2.3609  HMC=14.8719  L-HNN=8.6745
+  RMSE (sigma_w^2       ) PMMH=0.7697  HMC=4.3998  L-HNN=10.4347
+  MAE  (sigma_w^2       ) PMMH=0.5309  HMC=3.4044  L-HNN=9.9616
 -------------------------------------------------------------------------------------
 Distributional agreement with PMMH (KS / W1 — lower is better):
-  sigma_v^2             HMC: KS=0.3470 W1=2.3779   L-HNN: KS=0.3868 W1=1.8564
-  sigma_w^2             HMC: KS=0.6358 W1=1.6843   L-HNN: KS=0.9885 W1=10.1802
+  sigma_v^2             HMC: KS=0.4106 W1=12.4638   L-HNN: KS=1.0000 W1=7.0975
+  sigma_w^2             HMC: KS=0.7000 W1=2.8940   L-HNN: KS=1.0000 W1=9.4445
 -------------------------------------------------------------------------------------
 L-HNN gradient cost breakdown (Dhulipala et al. 2022, Table 1 metric):
   Training (pilot) gradient evals : 2550
-  Sampling fallback gradient evals : 1189
-  Total L-HNN gradient evals       : 3739
-  Traditional HMC gradient evals   : 36000  ((L+1)×iters = (5+1)×6000)
-  Gradient evals saved             : 32261 (89.6%)
-  Fallback intensity (∇ / step)    : 0.040
-  Break-even iters (train÷(L+1))   : 425  (L-HNN wins beyond this many iterations)
+  Sampling fallback gradient evals : 640
+  Total L-HNN gradient evals       : 3190
+  Traditional HMC gradient evals   : 35200  ((L+1)×iters = (10+1)×3200)
+  Gradient evals saved             : 32010 (90.9%)
+  Fallback intensity (∇ / step)    : 0.020
+  Break-even iters (train÷(L+1))   : 231  (L-HNN wins beyond this many iterations)
 -------------------------------------------------------------------------------------
 ESS per gradient evaluation (primary L-HNN efficiency metric):
-  HMC-LEDH  : 1.4828e-04
-  L-HNN HMC : 1.9342e-03
-  Speedup   : 13.04×
+  HMC-LEDH  : 1.2806e-04
+  L-HNN HMC : 2.4346e-03
+  Speedup   : 19.01×
 =====================================================================================
 
 Multi-chain convergence diagnostics  (Vehtari et al., 2021)
@@ -58,34 +58,34 @@ Multi-chain convergence diagnostics  (Vehtari et al., 2021)
   Pass criteria: rankR^ < 1.01 AND bulk-ESS > 400 AND tail-ESS > 400 per param.
 
 ============================================================================================
-  Diagnostics — PMMH (Bootstrap PF)   (chains=4, samples/chain=1000, CI level=95%)
+  Diagnostics — PMMH (Bootstrap PF)   (chains=4, samples/chain=400, CI level=95%)
 --------------------------------------------------------------------------------------------
 param              mean        std   bulk-ESS   tail-ESS    ESS%   splitR^    rankR^                 95% CI      truth   covers?    ok
 --------------------------------------------------------------------------------------------
-sigma_v^2         7.836      2.278       51.1       63.1    1.3%     1.283     1.339        [4.913, 13.828]     10.000       YES  FAIL
-sigma_w^2         1.435      0.387       74.6       97.7    1.9%     1.616     1.660         [0.799, 2.199]      1.000       YES  FAIL
+sigma_v^2         8.442      2.497       41.3       24.5    2.6%     6.598     4.006        [4.827, 13.133]     10.000       YES  FAIL
+sigma_w^2         1.515      0.572       45.9       23.8    2.9%    10.964     5.154         [0.863, 2.981]      1.000       YES  FAIL
 --------------------------------------------------------------------------------------------
   Overall verdict : NOT CONVERGED (rank-R^>=1.01 or ESS<400)
   Coverage        : all true values inside 95% CI
 ============================================================================================
 ============================================================================================
-  Diagnostics — HMC-LEDH (adapted M)   (chains=4, samples/chain=1000, CI level=95%)
+  Diagnostics — HMC-LEDH (adapted M)   (chains=4, samples/chain=400, CI level=95%)
 --------------------------------------------------------------------------------------------
 param              mean        std   bulk-ESS   tail-ESS    ESS%   splitR^    rankR^                 95% CI      truth   covers?    ok
 --------------------------------------------------------------------------------------------
-sigma_v^2         9.404      5.310       49.0       40.6    1.2% 3327408.250    12.977        [5.555, 18.446]     10.000       YES  FAIL
-sigma_w^2         3.118      2.311       40.4       26.4    1.0% 2658630.000    15.237         [1.541, 7.104]      1.000        NO  FAIL
+sigma_v^2        17.006     21.352       51.8       27.8    3.2% 58248.258    10.877        [1.112, 53.879]     10.000       YES  FAIL
+sigma_w^2         4.404      2.787       47.5       36.1    3.0%  1335.872    11.300         [1.757, 8.555]      1.000        NO  FAIL
 --------------------------------------------------------------------------------------------
   Overall verdict : NOT CONVERGED (rank-R^>=1.01 or ESS<400)
   Coverage        : some truth not covered
 ============================================================================================
 ============================================================================================
-  Diagnostics — L-HNN HMC (M = I)   (chains=4, samples/chain=1000, CI level=95%)
+  Diagnostics — L-HNN HMC (M = I)   (chains=4, samples/chain=400, CI level=95%)
 --------------------------------------------------------------------------------------------
 param              mean        std   bulk-ESS   tail-ESS    ESS%   splitR^    rankR^                 95% CI      truth   covers?    ok
 --------------------------------------------------------------------------------------------
-sigma_v^2         5.976      1.884       42.2       26.1    1.1%     3.459     3.248         [3.162, 9.755]     10.000        NO  FAIL
-sigma_w^2        11.619      7.226       55.7       37.3    1.4%    14.432     5.554        [3.357, 27.385]      1.000        NO  FAIL
+sigma_v^2         1.326      0.857       45.3       31.3    2.8%     4.833     4.905         [0.131, 2.866]     10.000        NO  FAIL
+sigma_w^2        10.962      3.106       38.8      145.3    2.4%     2.462     2.387        [6.078, 17.226]      1.000        NO  FAIL
 --------------------------------------------------------------------------------------------
   Overall verdict : NOT CONVERGED (rank-R^>=1.01 or ESS<400)
   Coverage        : some truth not covered

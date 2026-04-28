@@ -1,0 +1,45 @@
+=====================================================================================
+PMMH only — Bootstrap PF + Random-Walk MH (Bonus 1b baseline)
+Model: Andrieu et al. (2010), Eq 14-15  |  Prior: InvGamma(0.01, 0.01)
+Chains: 4  |  samples/chain: 20000  |  burn/chain: 3000
+=====================================================================================
+Metric                                                   PMMH
+-------------------------------------------------------------------------------------
+Acceptance rate                                         0.190
+ESS (sigma_v^2)                                         404.4
+ESS (sigma_w^2)                                         181.6
+Mean ESS                                                293.0
+Runtime (s)                                            7159.7
+ESS/s                                                   0.041
+Cost per step (s/proposal)                             0.0778
+-------------------------------------------------------------------------------------
+Mean sigma_v^2                                          8.348  (true=10.000)
+Mean sigma_w^2                                          1.343  (true=1.000)
+Std sigma_v^2                                           2.251
+Std sigma_w^2                                           0.556
+-------------------------------------------------------------------------------------
+Quality vs ground truth:
+  RMSE (sigma_v^2       ) 2.7917
+  MAE  (sigma_v^2       ) 2.3849
+  RMSE (sigma_w^2       ) 0.6537
+  MAE  (sigma_w^2       ) 0.4588
+=====================================================================================
+
+Multi-chain convergence diagnostics  (Vehtari et al., 2021)
+  bulk-ESS = ESS of rank-normalised split chains (mixing of the mean).
+  tail-ESS = ESS at the 5th / 95th percentile indicators (worst-case tail).
+  splitR^  = classic Gelman-Rubin R-hat with half-chain split.
+  rankR^   = max(rank-normalised, folded rank-normalised) split R-hat.
+  Pass criteria: rankR^ < 1.01 AND bulk-ESS > 400 AND tail-ESS > 400 per param.
+
+============================================================================================
+  Diagnostics — PMMH (Bootstrap PF)   (chains=4, samples/chain=20000, CI level=95%)
+--------------------------------------------------------------------------------------------
+param              mean        std   bulk-ESS   tail-ESS    ESS%   splitR^    rankR^                 95% CI      truth   covers?    ok
+--------------------------------------------------------------------------------------------
+sigma_v^2         8.348      2.251      380.6      214.9    0.5%     1.047     1.049        [5.094, 13.723]     10.000       YES  FAIL
+sigma_w^2         1.343      0.556      174.2      187.1    0.2%     1.055     1.075         [0.582, 2.713]      1.000       YES  FAIL
+--------------------------------------------------------------------------------------------
+  Overall verdict : NOT CONVERGED (rank-R^>=1.01 or ESS<400)
+  Coverage        : all true values inside 95% CI
+============================================================================================

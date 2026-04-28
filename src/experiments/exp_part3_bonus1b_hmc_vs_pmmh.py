@@ -64,15 +64,34 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 from src.filters.bonus.differentiable_ledh import DifferentiableLEDHLogLikelihood
-from src.filters.bonus.hmc_pf import HMCResult, run_hmc          # kept for 3-way comparison
+from src.filters.bonus.hmc_pf import (
+    HMCResult,
+    MultiChainHMCResult,
+    disperse_initial_states,
+    run_hmc,
+    run_hmc_multi_chain,
+)
 from src.filters.bonus.lhnn_hmc_pf import (
     LHNNConfig,
     LatentHNN,
+    MultiChainLHNNHMCResult,
     run_lhnn_hmc,
+    run_lhnn_hmc_multi_chain,
     ess_per_gradient,
 )
-from src.filters.bonus.pmmh import PMMHResult, bootstrap_pf_log_likelihood, run_pmmh
+from src.filters.bonus.pmmh import (
+    MultiChainPMMHResult,
+    PMMHResult,
+    bootstrap_pf_log_likelihood,
+    run_pmmh,
+    run_pmmh_multi_chain,
+)
 from src.models.ssm_katigawa import PMCMCNonlinearSSM
+from src.utils.mcmc_diagnostics import (
+    DiagnosticsSummary,
+    diagnostics_summary,
+    format_diagnostics_table,
+)
 
 tfd = tfp.distributions
 
@@ -564,10 +583,20 @@ def save_results(
     lhnn_training_grad_evals:  int,
     lhnn_sampling_grad_evals:  int,
     lhnn_num_leapfrog_steps:   int,
+    # --- multi-chain diagnostics (optional; needed for R-hat / coverage) ---
+    pmmh_samples_chains: Optional[tf.Tensor] = None,
+    hmc_samples_chains:  Optional[tf.Tensor] = None,
+    lhnn_samples_chains: Optional[tf.Tensor] = None,
 ) -> dict:
     """
     Write the 3-way comparison table and return a dict of key metrics for
     downstream use (e.g. the ESS/grad bar chart).
+
+    When the ``*_samples_chains`` arguments (shape ``(C, S, D)``) are
+    supplied, the report appends a Vehtari (2021) diagnostics block per
+    method covering bulk-/tail-ESS, split- and rank-normalized R-hat,
+    95% credible intervals, coverage of the truth, and a per-parameter
+    convergence verdict.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -711,6 +740,44 @@ def save_results(
         "=" * 85,
     ]
 
+    # ---- Vehtari (2021) convergence diagnostics block ----
+    # Only emitted when multi-chain tensors are supplied — the R-hat
+    # statistic is meaningless for a single chain.
+    multichain_blocks: list[str] = []
+    truth_cpu = tf.cast(true_values, tf.float32)
+    if pmmh_samples_chains is not None:
+        s = diagnostics_summary(pmmh_samples_chains, param_names, truth=truth_cpu)
+        multichain_blocks.append(format_diagnostics_table("PMMH (Bootstrap PF)", s))
+    if hmc_samples_chains is not None:
+        s = diagnostics_summary(hmc_samples_chains, param_names, truth=truth_cpu)
+        multichain_blocks.append(format_diagnostics_table("HMC-LEDH (adapted M)", s))
+    if lhnn_samples_chains is not None:
+        s = diagnostics_summary(lhnn_samples_chains, param_names, truth=truth_cpu)
+        multichain_blocks.append(format_diagnostics_table("L-HNN HMC (M = I)", s))
+
+    if multichain_blocks:
+        lines += [
+            "",
+            "Multi-chain convergence diagnostics  (Vehtari et al., 2021)",
+            (
+                "  bulk-ESS = ESS of rank-normalised split chains (mixing of the mean)."
+            ),
+            (
+                "  tail-ESS = ESS at the 5th / 95th percentile indicators (worst-case tail)."
+            ),
+            (
+                "  splitR^  = classic Gelman-Rubin R-hat with half-chain split."
+            ),
+            (
+                "  rankR^   = max(rank-normalised, folded rank-normalised) split R-hat."
+            ),
+            (
+                "  Pass criteria: rankR^ < 1.01 AND bulk-ESS > 400 AND tail-ESS > 400 per param."
+            ),
+            "",
+        ]
+        lines.extend(multichain_blocks)
+
     report = "\n".join(lines)
     path = out_dir / "comparison" / "results.txt"
     path.write_text(report, encoding="utf-8")
@@ -737,6 +804,8 @@ def save_ablation_results(
     param_names: list,
     *,
     ablation_mode: str = "lhnn",
+    baseline_samples_chains: Optional[tf.Tensor] = None,
+    baseline_label: Optional[str] = None,
 ) -> None:
     """
     ablation_mode: ``\"lhnn\"`` (default) or ``\"standard\"`` (``run_hmc`` cells).
@@ -827,6 +896,35 @@ def save_ablation_results(
         ]
     notes_tail.append("=" * 120)
     lines += notes_tail
+
+    # --------------------------------------------------------------------
+    # Multi-chain diagnostics block for the production (baseline) config.
+    # --------------------------------------------------------------------
+    if baseline_samples_chains is not None:
+        try:
+            label = baseline_label or (
+                "L-HNN HMC (production: baseline cell, multi-chain)"
+                if is_lhnn
+                else "Standard HMC (production: baseline cell, multi-chain)"
+            )
+            summary = diagnostics_summary(
+                baseline_samples_chains,
+                param_names,
+                truth=true_values,
+            )
+            block = format_diagnostics_table(label, summary)
+            lines += [
+                "",
+                "Convergence diagnostics for the production (multi-chain) baseline cell:",
+                "  Note: ablation cells above are single-chain ESS sweeps. The block below",
+                "        reports rank-normalized R-hat / bulk-ESS / tail-ESS / 95% CI / coverage",
+                "        for the SAME baseline run computed across all chains.",
+                "",
+                block,
+            ]
+        except Exception as exc:  # pragma: no cover - defensive
+            lines.append(f"\n[mcmc-diagnostics block skipped: {exc}]")
+
     path.write_text("\n".join(lines), encoding="utf-8")
     print(f"\nSaved ablation report to {path}")
 
@@ -888,6 +986,19 @@ def _parse_args() -> argparse.Namespace:
                    help="Online error monitor threshold Δmax_hnn (default 10.0).")
     p.add_argument("--lhnn_cooldown",      type=int,   default=10,
                    help="Cooldown steps N_lf after fallback trigger (default 10).")
+    # Multi-chain MCMC diagnostics
+    p.add_argument("--num_chains", type=int, default=4,
+                   help="Number of independent MCMC chains for R-hat / multi-chain ESS "
+                        "(default 4; Vehtari 2021 recommendation).")
+    p.add_argument("--samples_per_chain", type=int, default=250,
+                   help="Post-burnin samples per chain (default 250). Total samples "
+                        "= num_chains * samples_per_chain.")
+    p.add_argument("--burn_per_chain", type=int, default=200,
+                   help="Burn-in iterations per chain (default 200). Used by Stan-style "
+                        "3-window mass-matrix adaptation when --adapt_mass_matrix.")
+    p.add_argument("--no_adapt_mass_matrix", action="store_true",
+                   help="Disable diagonal mass-matrix adaptation in HMC-LEDH "
+                        "(Stan-style 3-window warmup is on by default).")
     return p.parse_args()
 
 
@@ -927,11 +1038,14 @@ def main() -> int:
     T           = 50
     true_sv2    = 10.0
     true_sw2    = 1.0
-    N_ledh      = 50
+    N_ledh      = 200
     N_bpf       = 500
-    n_samp      = 500   # was 150 — more samples to amortise training cost and improve ESS
-    n_burn      = 250   # was 100 — longer burn-in for step-size adaptation to stabilise
-    L           = 10    # was  5  — longer trajectories; HMC cost ∝ L+1 so savings scale up
+    # Multi-chain MCMC budget
+    num_chains  = int(args.num_chains)
+    n_samp      = int(args.samples_per_chain)   # post-burnin per chain
+    n_burn      = int(args.burn_per_chain)      # burn-in per chain
+    L           = 5                             # leapfrog steps per HMC proposal
+    adapt_mass  = not bool(args.no_adapt_mass_matrix)
     param_names  = ["sigma_v^2", "sigma_w^2"]
     true_values  = tf.constant([true_sv2, true_sw2], tf.float32)
     out_dir      = Path("reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH")
@@ -939,7 +1053,9 @@ def main() -> int:
     print("=" * 70)
     print("  L-HNN HMC (LEDH + OT-Sinkhorn)  vs  PMMH (Bootstrap PF)")
     print(f"  T={T}  N_ledh={N_ledh}  N_bpf={N_bpf}")
-    print(f"  HMC: L={L}  samples={n_samp}  burn={n_burn}")
+    print(f"  HMC: L={L}  samples/chain={n_samp}  burn/chain={n_burn}  chains={num_chains}")
+    print(f"  HMC adapt_mass_matrix={adapt_mass}  (Stan-style 3-window warmup)")
+    print("  CRN policy: shared across chains (HMC variants); per-chain (PMMH).")
     print(f"  True: sigma_v^2={true_sv2}  sigma_w^2={true_sw2}")
     print("=" * 70)
 
@@ -983,50 +1099,85 @@ def main() -> int:
     target_pmmh = make_target_log_prob(y_obs, bpf_ll)
 
     # ==================================================================
-    # PMMH (unchanged)
+    # PMMH — multi-chain for R-hat
     # ==================================================================
     print("\n" + "=" * 70)
-    print("  Running PMMH (Bootstrap PF + Random-Walk MH)")
+    print(f"  Running PMMH (Bootstrap PF + Random-Walk MH) — {num_chains} chains")
     print("=" * 70)
+    pmmh_inits = disperse_initial_states(
+        init_state, num_chains=num_chains, scale=0.1, seed=200
+    )
     t0 = time.time()
-    pmmh_result = run_pmmh(
+    pmmh_mc = run_pmmh_multi_chain(
         target_log_prob_fn = target_pmmh,
-        initial_state      = init_state,
+        initial_states     = pmmh_inits,
         num_results        = n_samp,
         num_burnin         = n_burn,
-        step_size          = 0.30,   # was 0.15 — acceptance was only 0.14, target ~0.23
+        step_size          = 0.15,
         seed               = 200,
+        verbose            = True,
     )
-    t_pmmh      = time.time() - t0
-    pmmh_samples = tf.exp(pmmh_result.samples)
-    print(f"\n  PMMH done in {t_pmmh:.1f}s  accept={float(pmmh_result.accept_rate):.3f}")
+    t_pmmh = time.time() - t0
+    # Chain 0 is treated as the "reference" single-chain result for backward
+    # compatibility with downstream plotting / RMSE / KS that expects (N, d).
+    pmmh_result = PMMHResult(
+        samples          = pmmh_mc.samples[0],
+        is_accepted      = pmmh_mc.is_accepted[0],
+        accept_rate      = tf.reduce_mean(pmmh_mc.accept_rate),
+        target_log_probs = pmmh_mc.target_log_probs[0],
+    )
+    pmmh_samples_chains = tf.exp(pmmh_mc.samples)                  # (C, S, d)
+    pmmh_samples = tf.reshape(
+        pmmh_samples_chains, [num_chains * n_samp, 2]
+    )                                                              # flat for plots
+    print(f"\n  PMMH (4 chains) done in {t_pmmh:.1f}s  "
+          f"mean_accept={float(tf.reduce_mean(pmmh_mc.accept_rate)):.3f}")
     if run_A:
-        summarise_chain(pmmh_samples, "PMMH", param_names, true_values)
+        summarise_chain(pmmh_samples, "PMMH (chains pooled)", param_names, true_values)
 
     # ==================================================================
-    # Standard HMC (Question A, or Question B with --standard ablation)
+    # Standard HMC — multi-chain with diagonal mass-matrix adaptation
     # ==================================================================
+    hmc_samples_chains: Optional[tf.Tensor] = None
     if need_main_hmc:
         print("\n" + "=" * 70)
-        print("  Running standard HMC (LEDH + OT-Sinkhorn) — reference only")
+        print(f"  Running HMC-LEDH ({num_chains} chains, "
+              f"adapt_mass_matrix={adapt_mass}, target_accept=0.65)")
         print("=" * 70)
+        hmc_inits = disperse_initial_states(
+            init_state, num_chains=num_chains, scale=0.15, seed=300
+        )
         t0 = time.time()
-        hmc_result = run_hmc(
+        hmc_mc = run_hmc_multi_chain(
             target_log_prob_fn = target_hmc,
-            initial_state      = init_state,
+            initial_states     = hmc_inits,
             num_results        = n_samp,
             num_burnin         = n_burn,
             step_size          = 0.005,
             num_leapfrog_steps = L,
             target_accept_prob = 0.65,
             seed               = 300,
-            adapt_step_size    = True,   # tune ε during burn-in
+            verbose            = True,
+            adapt_step_size    = True,
+            adapt_mass_matrix  = adapt_mass,
         )
         t_hmc = time.time() - t0
-        hmc_samples = tf.exp(hmc_result.samples)
-        print(f"\n  HMC done in {t_hmc:.1f}s  accept={float(hmc_result.accept_rate):.3f}")
+        # Chain 0 -> reference HMCResult (back-compat for plots / ESS-per-grad)
+        hmc_result = HMCResult(
+            samples          = hmc_mc.samples[0],
+            is_accepted      = hmc_mc.is_accepted[0],
+            accept_rate      = tf.reduce_mean(hmc_mc.accept_rate),
+            target_log_probs = hmc_mc.target_log_probs[0],
+            step_sizes       = hmc_mc.step_sizes[0],
+        )
+        hmc_samples_chains = tf.exp(hmc_mc.samples)
+        hmc_samples = tf.reshape(
+            hmc_samples_chains, [num_chains * n_samp, 2]
+        )
+        print(f"\n  HMC-LEDH (chains={num_chains}) done in {t_hmc:.1f}s  "
+              f"mean_accept={float(tf.reduce_mean(hmc_mc.accept_rate)):.3f}")
         if run_A:
-            summarise_chain(hmc_samples, "HMC", param_names, true_values)
+            summarise_chain(hmc_samples, "HMC-LEDH (chains pooled)", param_names, true_values)
     else:
         hmc_result = None
         hmc_samples = None
@@ -1034,47 +1185,66 @@ def main() -> int:
         print("\n  [Skipping standard HMC — not needed for this run configuration]")
 
     # ==================================================================
-    # L-HNN HMC (Question A, or Question B with L-HNN ablation [default])
+    # L-HNN HMC — multi-chain (training amortised across chains)
     # ==================================================================
     trained_lhnn = None
     lhnn_diag = None
     training_grad_evals = 0
     lhnn_sampling_grad_evals = 0
+    lhnn_samples_chains: Optional[tf.Tensor] = None
 
     if need_main_lhnn:
         print("\n" + "=" * 70)
-        print("  Running L-HNN HMC (LEDH target, neural leapfrog)")
+        print(f"  Running L-HNN HMC ({num_chains} chains; LEDH target, neural leapfrog)")
         print(f"  Training: {lhnn_cfg.num_pilot_trajectories} trajectories × "
               f"{lhnn_cfg.pilot_steps_per_trajectory} steps ≈ "
-              f"{pilot_grad_hint} pilot ∇ evals (one-time cost)")
+              f"{pilot_grad_hint} pilot ∇ evals (one-time, shared across chains)")
         print(f"  Δmax_hnn={lhnn_cfg.error_threshold}  cooldown={lhnn_cfg.cooldown_steps} steps")
         print("=" * 70)
 
+        lhnn_inits = disperse_initial_states(
+            init_state, num_chains=num_chains, scale=0.1, seed=400
+        )
         t0 = time.time()
-        lhnn_result, trained_lhnn, lhnn_diag = run_lhnn_hmc(
+        lhnn_mc, trained_lhnn = run_lhnn_hmc_multi_chain(
             target_log_prob_fn = target_hmc,
-            initial_state      = init_state,
+            initial_states     = lhnn_inits,
             num_results        = n_samp,
             num_burnin         = n_burn,
             step_size          = 0.005,
             num_leapfrog_steps = L,
-            target_accept_prob = 0.45,   # 0.65 is optimal for deterministic HMC; stochastic
-                                         # targets need a lower target or dual averaging drives
-                                         # eps to the floor chasing an unachievable rate.
+            target_accept_prob = 0.45,
             seed               = 400,
             verbose            = True,
             adapt_step_size    = True,
             lhnn_config        = lhnn_cfg,
+            pretrained_lhnn    = None,   # train on chain 0; reuse for chains 1..C-1
         )
-        t_lhnn       = time.time() - t0
-        lhnn_samples = tf.exp(lhnn_result.samples)
+        t_lhnn = time.time() - t0
+        # Chain 0 -> reference HMCResult
+        lhnn_result = HMCResult(
+            samples          = lhnn_mc.samples[0],
+            is_accepted      = lhnn_mc.is_accepted[0],
+            accept_rate      = tf.reduce_mean(lhnn_mc.accept_rate),
+            target_log_probs = lhnn_mc.target_log_probs[0],
+            step_sizes       = lhnn_mc.step_sizes[0],
+        )
+        lhnn_diag = lhnn_mc.per_chain_diagnostics[0]
+        # Training is done *once* (chain 0); sampling fallbacks accumulate across chains.
+        training_grad_evals = lhnn_diag.training_gradient_evals
+        lhnn_sampling_grad_evals = sum(
+            d.sampling_real_gradient_evals for d in lhnn_mc.per_chain_diagnostics
+        )
+        lhnn_samples_chains = tf.exp(lhnn_mc.samples)
+        lhnn_samples = tf.reshape(
+            lhnn_samples_chains, [num_chains * n_samp, 2]
+        )
 
-        training_grad_evals      = lhnn_diag.training_gradient_evals
-        lhnn_sampling_grad_evals = lhnn_diag.sampling_real_gradient_evals
-
-        print(f"\n  L-HNN HMC done in {t_lhnn:.1f}s  accept={float(lhnn_result.accept_rate):.3f}")
+        print(f"\n  L-HNN HMC (chains={num_chains}) done in {t_lhnn:.1f}s  "
+              f"mean_accept={float(tf.reduce_mean(lhnn_mc.accept_rate)):.3f}")
         if run_A:
-            summarise_chain(lhnn_samples, "L-HNN HMC", param_names, true_values)
+            summarise_chain(lhnn_samples, "L-HNN HMC (chains pooled)",
+                            param_names, true_values)
     else:
         lhnn_result = None
         lhnn_samples = None
@@ -1095,14 +1265,17 @@ def main() -> int:
             t_pmmh       = t_pmmh,
             t_hmc        = t_hmc,
             t_lhnn       = t_lhnn,
-            n_samp       = n_samp,
-            n_burn       = n_burn,
+            n_samp       = n_samp * num_chains,
+            n_burn       = n_burn * num_chains,
             true_values  = true_values,
             param_names  = param_names,
             out_dir      = out_dir,
             lhnn_training_grad_evals  = training_grad_evals,
             lhnn_sampling_grad_evals  = lhnn_sampling_grad_evals,
             lhnn_num_leapfrog_steps   = L,
+            pmmh_samples_chains = pmmh_samples_chains,
+            hmc_samples_chains  = hmc_samples_chains,
+            lhnn_samples_chains = lhnn_samples_chains,
         )
         plot_diagnostics(
             pmmh_samples, hmc_samples, lhnn_samples,
@@ -1147,7 +1320,8 @@ def main() -> int:
 
         hmc_grid_results: list = []
 
-        total_iters_base = n_samp + n_burn
+        # The baseline cell reflects ALL chains pooled (num_chains * (n_samp + n_burn) iters).
+        total_iters_base = num_chains * (n_samp + n_burn)
         grad_stats_base = grad_stats_for_target(
             target_hmc, init_state, grad_seeds, horizon_fracs, y_obs, ledh_ll,
         )
@@ -1166,7 +1340,7 @@ def main() -> int:
                 "ess_per_s":      ess_mean_base / max(t_hmc, 1e-6),
                 "ess_per_grad":   ess_mean_base / max(total_grads_base, 1),
                 "fallback_rate":  0.0,
-                "cost_per_step":  per_step_cost(t_hmc, n_samp, n_burn),
+                "cost_per_step":  per_step_cost(t_hmc, num_chains * n_samp, num_chains * n_burn),
                 "runtime_s":      t_hmc,
                 "bias_true":      tf.abs(mean_base - true_values).numpy().tolist(),
                 "bias_vs_pmmh":   tf.abs(mean_base - tf.reduce_mean(pmmh_samples, axis=0)).numpy().tolist(),
@@ -1185,7 +1359,7 @@ def main() -> int:
                 "ess_per_s":      ess_mean_base / max(t_lhnn, 1e-6),
                 "ess_per_grad":   ess_mean_base / max(total_grads_base, 1),
                 "fallback_rate":  lhnn_sampling_grad_evals / max(L * total_iters_base, 1),
-                "cost_per_step":  per_step_cost(t_lhnn, n_samp, n_burn),
+                "cost_per_step":  per_step_cost(t_lhnn, num_chains * n_samp, num_chains * n_burn),
                 "runtime_s":      t_lhnn,
                 "bias_true":      tf.abs(mean_base - true_values).numpy().tolist(),
                 "bias_vs_pmmh":   tf.abs(mean_base - tf.reduce_mean(pmmh_samples, axis=0)).numpy().tolist(),
@@ -1330,6 +1504,9 @@ def main() -> int:
                     "grad_stats":    g_stats,
                 })
 
+        baseline_chains = (
+            hmc_samples_chains  if ablation_standard else lhnn_samples_chains
+        )
         save_ablation_results(
             ablation_out,
             pmmh_samples,
@@ -1337,6 +1514,12 @@ def main() -> int:
             true_values,
             param_names,
             ablation_mode=ablation_mode,
+            baseline_samples_chains=baseline_chains,
+            baseline_label=(
+                f"Standard HMC baseline (eps=2.0,gw=1,nl=5; chains={num_chains})"
+                if ablation_standard else
+                f"L-HNN HMC baseline (eps=2.0,gw=1,nl=5; chains={num_chains})"
+            ),
         )
         plot_ablation_summary(
             hmc_grid_results,

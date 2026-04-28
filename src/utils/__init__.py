@@ -24,6 +24,19 @@ from src.utils.logging_config import (
     LoggerAdapter,
 )
 
+from src.utils.mcmc_diagnostics import (
+    DiagnosticsSummary,
+    bulk_ess,
+    tail_ess,
+    split_rhat,
+    rank_rhat,
+    credible_interval,
+    coverage,
+    convergence_verdict,
+    diagnostics_summary,
+    format_diagnostics_table,
+)
+
 __all__ = [
     # Linear algebra
     "regularize_covariance",
@@ -36,4 +49,15 @@ __all__ = [
     "setup_logging",
     "set_level",
     "LoggerAdapter",
+    # MCMC diagnostics
+    "DiagnosticsSummary",
+    "bulk_ess",
+    "tail_ess",
+    "split_rhat",
+    "rank_rhat",
+    "credible_interval",
+    "coverage",
+    "convergence_verdict",
+    "diagnostics_summary",
+    "format_diagnostics_table",
 ]
