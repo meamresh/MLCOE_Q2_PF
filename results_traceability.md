@@ -1,14 +1,14 @@
-# Results Traceability for `interview_answers.tex`
+# Results Traceability for `HMC_SV_Report.pdf`
 
 Every reported number, table entry, and experimental outcome in
-`interview_answers.tex` mapped to the code, configuration, data directory,
+`HMC_SV_Report.pdf` mapped to the code, configuration, data directory,
 and command that produces it.
 
-- **Repository root:** `/Users/amreshverma/Documents/Random Work/MLCOE_Q2_PF`
-- **Reports root (`$R`):** `/Users/amreshverma/Documents/Random Work/MLCOE_Q2_PF/reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH`
+- **Repository root:** `/Users/amreshverma/Documents/ML_Projects/MLCOE_Q2_PF`
+- **Reports root (`$R`):** `/Users/amreshverma/Documents/ML_Projects/MLCOE_Q2_PF/reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH`
 - **Run prelude for every command below:**
   ```bash
-  cd "/Users/amreshverma/Documents/Random Work/MLCOE_Q2_PF"
+  cd "/Users/amreshverma/Documents/ML_Projects/MLCOE_Q2_PF"
   export PYTHONPATH="$PWD:${PYTHONPATH:-}"
   ```
 - **Environment of record:** TensorFlow 2.16.2, TFP 0.24.0, CPU. Absolute
@@ -425,7 +425,7 @@ These reproduce on a laptop in seconds–minutes and cover the §2, §5, §6, §
 numbers without HPC:
 
 ```bash
-cd "/Users/amreshverma/Documents/Random Work/MLCOE_Q2_PF"
+cd "/Users/amreshverma/Documents/ML_Projects/MLCOE_Q2_PF"
 export PYTHONPATH="$PWD:${PYTHONPATH:-}"
 
 # §2 — JIT / retracing / N-scaling (d=1 and d=2)
