@@ -161,8 +161,31 @@ class DifferentiableLEDHLogLikelihood:
         resample_threshold: float = 0.5,
         grad_window: int = 5,
         jit_compile: bool = True,
+        integrator: str = "exp",
     ):
-        """Initialise LEDH log-likelihood; see class docstring for parameters."""
+        """Initialise LEDH log-likelihood; see class docstring for parameters.
+
+        Parameters (extra)
+        ------------------
+        integrator : {"euler", "exp"}
+            Discretisation of the per-substep linear ODE
+            ``dx/dlam = A(lam) x + b(lam)``.
+
+            - ``"exp"`` (default): exact-local exponential integrator,
+              ``x_new = x * exp(A eps_j) + b * (exp(A eps_j) - 1)/A``.
+              Machine-precision per substep (the only error comes from
+              freezing (A, b) at the substep midpoint), and
+              ``log|J| = A eps_j`` exactly. Allows roughly 1/4 the
+              substeps for the same global flow accuracy, and produces
+              substantially more stable gradients than Euler (see
+              ``scripts/test_exp_integrator.py`` for the CRN comparison).
+            - ``"euler"`` (legacy): forward Euler,
+              ``x_new = x + eps_j * (A x + b)``. Local error O(eps^2);
+              ``log|J| = log|1 + eps_j A|``. Kept for reproducing the
+              original gradient-stability report.
+        """
+        if integrator not in {"euler", "exp"}:
+            raise ValueError(f"integrator must be 'euler' or 'exp', got {integrator!r}")
         self.num_particles = num_particles
         self.n_lambda = n_lambda
         self.sinkhorn_epsilon = sinkhorn_epsilon
@@ -170,6 +193,7 @@ class DifferentiableLEDHLogLikelihood:
         self.resample_threshold = resample_threshold
         self.grad_window = grad_window
         self.jit_compile = jit_compile
+        self.integrator = integrator
 
         # Geometric pseudo-time sizes: epsilon_j = epsilon_1 * q^j
         q = 1.2
@@ -281,20 +305,26 @@ class DifferentiableLEDHLogLikelihood:
         log_det_jac = tf.zeros([N])
         lam_cum = 0.0
 
+        use_exp = self.integrator == "exp"
+
         for j in range(self.n_lambda):
             eps_j = self.epsilons[j]
             lam_k = lam_cum + eps_j / 2.0
             lam_cum += eps_j
 
+            # --- Common flow coefficients (frozen at substep midpoint) ---
             H = _safe_scalar(eta / 10.0)
             h_eta = _safe_scalar(eta**2 / 20.0)
             e = h_eta - H * eta
 
-            S = tf.maximum(lam_k * H**2 * P_t + R_val, _EPS)
-            A = tf.clip_by_value(-0.5 * P_t * H**2 / S, -10.0, 0.0)
+            H_sq = H ** 2
+            P_H_sq = P_t * H_sq
+            S = tf.maximum(lam_k * P_H_sq + R_val, _EPS)
+            A = tf.clip_by_value(-0.5 * P_H_sq / S, -10.0, 0.0)
 
-            I_lam_A = 1.0 + lam_k * A
-            I_2lam_A = 1.0 + 2.0 * lam_k * A
+            lam_A = lam_k * A
+            I_lam_A = 1.0 + lam_A
+            I_2lam_A = 1.0 + 2.0 * lam_A
 
             innov = tf.clip_by_value(z_val - e, -100.0, 100.0)
             b_vec = I_2lam_A * (
@@ -302,14 +332,27 @@ class DifferentiableLEDHLogLikelihood:
             )
             b_vec = tf.clip_by_value(b_vec, -100.0, 100.0)
 
-            vel = tf.clip_by_value(A * particles_t + b_vec, -50.0, 50.0)
-            particles_t = _safe_scalar(particles_t + eps_j * vel)
-
-            vel_eta = tf.clip_by_value(A * eta + b_vec, -50.0, 50.0)
-            eta = _safe_scalar(eta + eps_j * vel_eta)
-
-            J_val = tf.maximum(tf.abs(1.0 + eps_j * A), _EPS)
-            log_det_jac = log_det_jac + tf.math.log(J_val)
+            # --- Substep integration: Euler (legacy) or Exp (exact-local) ---
+            if use_exp:
+                # x_new = x * exp(A eps) + b * (exp(A eps) - 1)/A. A is clipped
+                # to [-10, 0], so exp(A eps) in (e^{-10 eps}, 1]. Use expm1 for
+                # stability and a safe divisor at A -> 0 (where phi -> eps_j).
+                Az = A * eps_j
+                exp_Az = tf.exp(Az)
+                expm1_Az = tf.math.expm1(Az)
+                A_safe = tf.where(tf.abs(A) > 1e-8, A, tf.fill(tf.shape(A), 1e-8))
+                phi_A = expm1_Az / A_safe   # = (exp(A eps) - 1)/A
+                particles_t = _safe_scalar(particles_t * exp_Az + b_vec * phi_A)
+                eta = _safe_scalar(eta * exp_Az + b_vec * phi_A)
+                # log|J| = log(exp(A eps)) = A eps exactly (and always finite).
+                log_det_jac = log_det_jac + Az
+            else:
+                vel = tf.clip_by_value(A * particles_t + b_vec, -50.0, 50.0)
+                particles_t = _safe_scalar(particles_t + eps_j * vel)
+                vel_eta = tf.clip_by_value(A * eta + b_vec, -50.0, 50.0)
+                eta = _safe_scalar(eta + eps_j * vel_eta)
+                J_val = tf.maximum(tf.abs(1.0 + eps_j * A), _EPS)
+                log_det_jac = log_det_jac + tf.math.log(J_val)
 
         # Weights
         y_pred = _safe_scalar(particles_t**2 / 20.0)

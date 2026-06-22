@@ -1,0 +1,22 @@
+====================================================================================================
+SVSSM HMC Parameter Recovery with Neural-OT Resampling
+====================================================================================================
+TF 2.16.2
+Checkpoint: reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/section2_phase3/deeponet.weights.h5
+Arch: deeponet
+truth: mu=0.0, phi=0.95, sigma_eta=0.3
+T=50 N=64 n_lambda=10 L=5 step_size=0.01 dispersion=0.05
+num_chains=4 burnin=120 results=500
+priors: mu~N(2.0,3.0^2), phi_raw~N(0.0,2.0^2), log_sigma_eta_sq~N(1.5,3.0^2)
+Wall: 3754.9s (sum (sequential))
+
+param                     truth       mean        std     median       2.5%      97.5%     Rhat      ESS    bias%
+--------------------------------------------------------------------------------------------------------------
+mu                       0.0000     0.4894     1.1421     0.6739    -2.6585     2.1669    1.056     -0.0    +nan%
+phi                      0.9500     0.6469     0.4773     0.8494    -0.8069     0.9949    1.052     -0.9   -31.9%
+sigma_eta_sq             0.0900     0.3715     0.3748     0.2641     0.0132     1.3820    1.034   1662.8  +312.7%
+sigma_eta (derived)      0.3000     0.5394     0.2839     0.5139     0.1148     1.1756      nan      nan   +79.8%
+
+Accept rate per chain: [0.506, 0.618, 0.582, 0.614]
+Overall accept rate:   0.580
+====================================================================================================

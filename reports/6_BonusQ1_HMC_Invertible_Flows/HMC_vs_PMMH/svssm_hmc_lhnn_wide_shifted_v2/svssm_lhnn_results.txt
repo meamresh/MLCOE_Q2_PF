@@ -1,0 +1,43 @@
+==============================================================================================================
+SVSSM LHNN HMC Parameter Recovery Report
+==============================================================================================================
+TF 2.16.2, TFP 0.24.0
+truth: mu=0.0, phi=0.95, sigma_eta=0.3
+T=50 N=64 n_lambda=10 K=10 L=5 step_size=0.05 dispersion=0.15
+num_chains=4 burnin=200 results=800
+Wall: 715.7s
+
+LHNN config: hidden_units=128, num_hidden=3, epochs=1500, pilot=(30,40)
+  error_threshold=10.0, cooldown_steps=10, target_accept=0.45
+
+param                       truth       mean        std     median       2.5%      97.5%     Rhat      ESS    bias%
+------------------------------------------------------------------------------------------------------------------------
+mu                         0.0000     0.3119     1.6439     0.5364    -3.9702     3.2146    1.456     -0.0    +nan%
+phi                        0.9500     0.7870     0.3345     0.9251    -0.3025     0.9934    1.093    -16.0   -17.2%
+sigma_eta_sq               0.0900     0.2973     0.3225     0.1790     0.0136     1.1797    1.067     -0.0  +230.4%
+sigma_eta (derived)        0.3000     0.4820     0.2551     0.4230     0.1166     1.0861      nan      nan   +60.7%
+
+Accept rate per chain: [0.7674999833106995, 0.7287499904632568, 0.6875, 0.7712500095367432]
+Overall accept rate:   0.739
+
+Gradient-eval accounting:
+  Training (pilot)   : 1230
+  Sampling fallback  : 0
+  Total LHNN         : 1230
+  Vanilla HMC equiv  : 24000 (= chains * (L+1) * (burnin+results))
+  Saved              : 22770 (94.9%)
+
+Agreement vs vanilla HMC baseline (KS p>0.05 ⇒ marginals statistically indistinguishable):
+param              lhnn_med   base_med     |Δmed|   sd_ratio       KS_p  verdict
+mu                   0.5364     0.3101     0.2264      1.011     0.0000  DIFFER
+phi                  0.9251     0.9506     0.0255      0.636     0.0000  DIFFER
+sigma_eta_sq         0.1790     0.1012     0.0778      1.203     0.0000  DIFFER
+
+Notes:
+ - Same data + target + priors as exp_hmc_svssm.py at this base_seed.
+ - LHNN cost is dominated by the one-off pilot phase; sampling-
+   phase gradient evals are typically <5% of vanilla HMC's.
+ - Posterior shape MUST match vanilla HMC (the target is identical).
+   Any disagreement is a kernel-quality issue (under-trained L-HNN,
+   too-loose error_threshold, or too-short chain).
+==============================================================================================================

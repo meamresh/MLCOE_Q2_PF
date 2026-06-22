@@ -1,0 +1,43 @@
+==================================================================================
+h_0 ABLATION — windowed dense-mass kernel vs original dual-averaging kernel
+==================================================================================
+generated   : 2026-06-21T19:19:38
+truth       : mu=0.0  phi=0.95  sigma_eta=0.3  (sigma_eta_sq=0.09)
+WINDOWED    : kernel='windowed-adaptive + DENSE mass'  T=50 chains=4 burnin=300 results=1000 L=5  dir=h0_ablation_windowed
+DUAL-AVG    : kernel='dual-averaging + identity mass'  T=50 chains=2 burnin=200 results=200 L=5  dir=h0_ablation
+priors (both, WIDE): mu~N(0,5^2)  phi_raw~N(0,2^2)  log_sigma_eta_sq~N(-2,2^2)
+threshold   : 95% CI must cover truth; rank/split-Rhat<=1.01 ideal
+==================================================================================
+
+[WINDOWED dense (4 chains x 1000)]
+  init           mu med[cov]   phi med[cov]    s2 med[cov]     Rhat mu/phi/s2  cov   acc
+  ------------------------------------------------------------------------------
+  stationary  +0.76[Y]        +0.954[Y]      0.058[Y]      1.42/1.11/1.05     4/4  0.43
+  fixed_mu    +0.25[Y]        +0.913[Y]      0.124[Y]      1.03/1.02/1.01     4/4  0.59
+  diffuse     +0.96[N]        +0.436[N]      0.132[Y]      1.00/1.02/1.00     2/4  0.78
+
+[DUAL-AVG identity (2 chains x 200)]
+  init           mu med[cov]   phi med[cov]    s2 med[cov]     Rhat mu/phi/s2  cov   acc
+  ------------------------------------------------------------------------------
+  stationary  +0.13[Y]        +0.947[Y]      0.133[Y]      1.21/1.17/1.18     4/4  0.69
+  fixed_mu    -0.51[Y]        +0.984[Y]      0.098[Y]      1.04/1.09/1.11     4/4  0.63
+  diffuse     +0.96[N]        +0.485[N]      0.180[Y]      1.00/1.05/1.01     2/4  0.76
+
+==================================================================================
+HEADLINE (robust across both kernels):
+  - diffuse init FAILS: mu -> ~0.96 (truth 0), phi -> 0.44-0.49 (truth 0.95),
+    truth OUTSIDE 95% CI -> coverage 2/4. Holds under both kernels.
+  - stationary & fixed_mu RECOVER: 4/4 coverage under both kernels.
+  => the h_0 conclusion is NOT an artifact of the sampler; it reproduces
+     under the production windowed dense-mass kernel.
+
+CAVEAT (windowed-specific, stationary init):
+  per-chain acceptance = [0.59, 0.55, 0.52, 0.08]
+  per-chain phi median = [0.901, 0.908, 0.945, 0.986]
+  -> chain [3] stuck at phi~=0.986 (the +1 edge),
+     where the stationary init's h_0 variance sigma^2/(1-phi^2) funnels.
+  stationary split-Rhat mu/phi/s2 : all 4 chains = [1.42, 1.11, 1.05]
+                                    drop stuck    = [1.18, 1.06, 1.02]
+  This is a per-chain frozen-step fragility of windowed HMC; it inflates the
+  stationary Rhat but does NOT change the coverage verdict (diffuse still fails).
+==================================================================================

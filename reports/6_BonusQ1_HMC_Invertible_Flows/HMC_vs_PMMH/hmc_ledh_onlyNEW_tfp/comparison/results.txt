@@ -1,0 +1,45 @@
+=====================================================================================
+HMC-LEDH only — Stan-style 3-window warmup, shared CRN across chains
+Model: Andrieu et al. (2010), Eq 14-15  |  Prior: InvGamma(0.01, 0.01)
+Chains: 1  |  samples/chain: 200  |  burn/chain: 100
+=====================================================================================
+Metric                                               HMC-LEDH
+-------------------------------------------------------------------------------------
+Acceptance rate                                         0.000
+ESS (sigma_v^2)                                           nan
+ESS (sigma_w^2)                                           nan
+Mean ESS                                                  nan
+Runtime (s)                                             687.6
+ESS/s                                                     nan
+Cost per step (s/proposal)                             2.2921
+-------------------------------------------------------------------------------------
+Mean sigma_v^2                                          8.000  (true=10.000)
+Mean sigma_w^2                                          1.500  (true=1.000)
+Std sigma_v^2                                           0.000
+Std sigma_w^2                                           0.000
+-------------------------------------------------------------------------------------
+Quality vs ground truth:
+  RMSE (sigma_v^2       ) 2.0000
+  MAE  (sigma_v^2       ) 2.0000
+  RMSE (sigma_w^2       ) 0.5000
+  MAE  (sigma_w^2       ) 0.5000
+=====================================================================================
+
+Multi-chain convergence diagnostics  (Vehtari et al., 2021)
+  bulk-ESS = ESS of rank-normalised split chains.
+  tail-ESS = ESS at the 5/95 percentile indicators.
+  splitR^  = classic Gelman-Rubin R-hat with half-chain split.
+  rankR^   = max(rank-normalised, folded rank-normalised) split R-hat.
+  Pass: rankR^ < 1.01 AND bulk-ESS > 400 AND tail-ESS > 400 per param.
+
+============================================================================================
+  Diagnostics — HMC-LEDH (adapted M, shared CRN)   (chains=1, samples/chain=200, CI level=95%)
+--------------------------------------------------------------------------------------------
+param              mean        std   bulk-ESS   tail-ESS    ESS%   splitR^    rankR^                 95% CI      truth   covers?    ok
+--------------------------------------------------------------------------------------------
+sigma_v^2         8.000      0.000        6.8        6.8    3.4%       nan     6.136         [8.000, 8.000]     10.000        NO  FAIL
+sigma_w^2         1.500      0.000        6.8        6.8    3.4%       nan     6.136         [1.500, 1.500]      1.000        NO  FAIL
+--------------------------------------------------------------------------------------------
+  Overall verdict : NOT CONVERGED (rank-R^>=1.01 or ESS<400)
+  Coverage        : some truth not covered
+============================================================================================

@@ -1,0 +1,550 @@
+\documentclass[11pt,a4paper]{article}
+
+% ── packages ──
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{enumitem}
+
+% ── listing style ──
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codegreen}{RGB}{0,128,0}
+\definecolor{codegray}{RGB}{100,100,100}
+\definecolor{codepurple}{RGB}{128,0,128}
+\lstdefinestyle{py}{
+  language=Python,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue}\bfseries,
+  stringstyle=\color{codegreen},
+  commentstyle=\color{codegray}\itshape,
+  emphstyle=\color{codepurple},
+  frame=single,
+  breaklines=true,
+  showstringspaces=false,
+  numbers=left,
+  numberstyle=\tiny\color{codegray},
+  tabsize=4,
+  captionpos=b,
+}
+\lstset{style=py}
+
+% ── shortcuts ──
+\newcommand{\py}[1]{\lstinline[style=py]{#1}}
+\newcommand{\file}[1]{\texttt{#1}}
+
+% ══════════════════════════════════════════════════════════════════
+\begin{document}
+
+% ── title page ──
+\begin{titlepage}
+\centering
+\vspace*{4cm}
+{\Huge\bfseries Kalman Filter Experiment\\[6pt]
+Codebase Explanation\par}
+\vspace{1.5cm}
+{\Large MLCOE Q2 --- Particle Flow Project\par}
+\vspace{2cm}
+{\large\today\par}
+\vfill
+{\itshape A self-contained guide covering architecture, execution flow,\\
+TensorFlow design decisions, and the mathematical foundations\\
+implemented in the \texttt{exp\_part1\_1a\_lgssm\_kf} pipeline.\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════════════
+\section{Overview}
+% ══════════════════════════════════════════════════════════════════
+
+The Kalman Filter (KF) experiment is the simplest baseline in the
+project: it applies the classical KF to a 2-D constant-velocity
+Linear Gaussian State-Space Model (LGSSM).  Every subsequent
+experiment (EKF, UKF, particle filters, particle flow) builds on the
+same data-generation and metrics infrastructure, so understanding this
+pipeline is essential.
+
+\subsection{File Map}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\file{configs/ssm\_linear.yaml}            & Model \& noise parameters          \\
+\file{src/models/ssm\_lgssm.py}            & \py{LGSSM} dataclass               \\
+\file{src/data/generators.py}              & YAML parser + trajectory sampler   \\
+\file{src/filters/kalman.py}               & \py{KalmanFilter} class            \\
+\file{src/metrics/accuracy.py}             & RMSE, NEES, NLL metrics            \\
+\file{src/experiments/exp\_part1\_1a\_lgssm\_kf.py} & Experiment driver         \\
+\bottomrule
+\end{tabular}
+\caption{Files directly involved in the KF experiment.}
+\end{table}
+
+\subsection{Execution Flow}
+
+\begin{enumerate}
+\item \textbf{Parse configuration} ---
+      \py{_parse_yaml_simple} reads \file{ssm\_linear.yaml}.
+\item \textbf{Build model} ---
+      \py{LGSSM.from_config} constructs matrices $A,B,C,D,Q,R,P_0$.
+\item \textbf{Generate data} ---
+      \py{LGSSM.sample(N)} draws a ground-truth trajectory
+      $\{x_t\}_{t=1}^{N}$ and observations $\{y_t\}$.
+\item \textbf{Filter} ---
+      \py{KalmanFilter.filter(Y)} runs predict/update for every $t$.
+\item \textbf{Evaluate} ---
+      \py{compute_rmse} computes position and velocity RMSE.
+\item \textbf{Save} --- CSV table + four-panel PNG figure.
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════════════════════════
+\section{The State-Space Model}
+\label{sec:ssm}
+% ══════════════════════════════════════════════════════════════════
+
+\subsection{Mathematical Formulation}
+
+The discrete-time LGSSM is
+\begin{align}
+  \bm{x}_t &= A\,\bm{x}_{t-1} + B\,\bm{v}_t,
+    \qquad \bm{v}_t \sim \mathcal{N}(\bm{0},\,I), \label{eq:trans}\\
+  \bm{y}_t &= C\,\bm{x}_t + D\,\bm{w}_t,
+    \qquad \bm{w}_t \sim \mathcal{N}(\bm{0},\,I), \label{eq:obs}
+\end{align}
+with process-noise covariance $Q = BB^\top$ and measurement-noise
+covariance $R = DD^\top$.
+
+\subsection{Constant-Velocity Model (ssm\_linear.yaml)}
+
+The state vector is $\bm{x} = [p_x,\, v_x,\, p_y,\, v_y]^\top$
+with $\Delta t = 1$:
+\[
+A = \begin{bmatrix}1&1&0&0\\0&1&0&0\\0&0&1&1\\0&0&0&1\end{bmatrix},
+\quad
+B_{\text{raw}} = \begin{bmatrix}0.5&0\\1&0\\0&0.5\\0&1\end{bmatrix},
+\quad
+C = \begin{bmatrix}1&0&0&0\\0&0&1&0\end{bmatrix}.
+\]
+The YAML specifies $\sigma_a=0.5$ (acceleration noise standard
+deviation) and $\sigma_z=5.0$ (measurement noise standard deviation).
+$B$ and $D$ are scaled in code:
+$B = \sigma_a B_{\text{raw}}$, $D = \sigma_z D_{\text{raw}}$.
+
+\subsection{Initial Covariance ($P_0$)}
+
+The config sets
+$P_0 = \operatorname{diag}(10,\,5,\,10,\,5)$
+and $\bm{m}_0 = \bm{0}$.  This is a diagonal prior expressing
+moderate uncertainty in position (10) and velocity (5).
+
+\subsection{LGSSM Class (\file{ssm\_lgssm.py})}
+
+\py{LGSSM} is a Python \py{@dataclass} holding the eight tensors
+$(A,B,C,D,\bm{m}_0,P_0,Q,R)$ plus integer dimensions.
+Its two methods are:
+
+\begin{description}[leftmargin=1.5cm]
+\item[\py{from_config}] Static factory that parses the config dict,
+  scales $B$/$D$ by noise standard deviations, and computes $Q$/$R$ via
+  \py{tf.matmul(B, B, transpose_b=True)}.
+\item[\py{sample}] Generates a trajectory by iterating
+  Eqs.~\eqref{eq:trans}--\eqref{eq:obs}.  Uses
+  \py{tfd.MultivariateNormalTriL} for the initial draw and
+  \py{tfd.MultivariateNormalDiag} for i.i.d.\ noise.
+\end{description}
+
+\paragraph{TensorFlow detail.}
+The Cholesky decomposition $P_0 = LL^\top$ is computed via
+\py{tf.linalg.cholesky(P0)} and passed to
+\py{MultivariateNormalTriL(loc=m0, scale_tril=L)}.  TFP's TriL
+parameterisation is preferred because it avoids redundant
+eigendecompositions that \py{MultivariateNormalFullCovariance} would
+perform internally.
+
+
+% ══════════════════════════════════════════════════════════════════
+\section{Data Generation (\file{generators.py})}
+% ══════════════════════════════════════════════════════════════════
+
+\subsection{\py{_parse_yaml_simple}}
+
+A dependency-free YAML parser (no PyYAML required).  It handles:
+\begin{itemize}
+\item Scalars (\py{seed: 42}),
+\item Indented sub-dicts (\py{dimensions}, \py{params}),
+\item Row-major matrices (\py{A}, \py{B_raw}, \py{C}, \py{D}),
+\item Diagonal vectors (\py{Sigma0_diag}).
+\end{itemize}
+
+\subsection{\py{generate_lgssm_from_yaml}}
+
+Orchestrates the full data pipeline:
+
+\begin{lstlisting}[caption={Data generation entry point.}]
+model, X_true, Y_obs, data_dict = generate_lgssm_from_yaml(config_path)
+\end{lstlisting}
+
+Returns the \py{LGSSM} instance, the true state matrix
+$X \in \mathbb{R}^{N \times 4}$, the observation matrix
+$Y \in \mathbb{R}^{N \times 2}$, and a convenience dictionary
+splitting each component into named tensors for plotting.
+
+
+% ══════════════════════════════════════════════════════════════════
+\section{The Kalman Filter (\file{kalman.py})}
+\label{sec:kf}
+% ══════════════════════════════════════════════════════════════════
+
+\subsection{Constructor}
+
+\begin{lstlisting}[caption={KalmanFilter initialisation.}]
+kf = KalmanFilter(A=model.A, C=model.C,
+                  x0=x0_reshaped, P0=model.P0,
+                  Q=model.Q, R=model.R)
+\end{lstlisting}
+
+Key design decisions:
+\begin{itemize}
+\item \textbf{Column-vector state}: $\bm{x}$ is stored as shape
+  $(n, 1)$ so that all updates use \py{tf.matmul} without manual
+  transpose.
+\item \textbf{Flexible noise input}: $Q$ and $R$ can be supplied
+  directly or derived from $B$/$D$ via $Q = BB^\top$.
+  If neither is given, a zero matrix is used (noiseless system).
+\end{itemize}
+
+\subsection{Predict Step}
+\label{sec:predict}
+
+The time update propagates the state estimate and covariance one step
+forward:
+\begin{align}
+  \hat{\bm{x}}_{t|t-1} &= A\,\hat{\bm{x}}_{t-1|t-1},
+    \label{eq:kf-pred-mean}\\
+  P_{t|t-1} &= A\,P_{t-1|t-1}\,A^\top + Q.
+    \label{eq:kf-pred-cov}
+\end{align}
+
+\begin{lstlisting}[caption={Predict step implementation.}]
+def predict(self):
+    self.x = tf.matmul(self.A, self.x)
+    self.P = tf.matmul(self.A,
+                tf.matmul(self.P, self.A, transpose_b=True)) + self.Q
+    return self.x, self.P
+\end{lstlisting}
+
+\paragraph{TensorFlow note.}
+\py{tf.matmul(P, A, transpose_b=True)} computes $PA^\top$ in a
+single fused BLAS call without creating the transposed matrix
+explicitly, saving memory and one kernel launch.
+
+\subsection{Update Step}
+\label{sec:update}
+
+Given a new observation $\bm{z}_t$:
+\begin{align}
+  \bm{\nu}_t &= \bm{z}_t - C\,\hat{\bm{x}}_{t|t-1},
+    &\text{(innovation)} \label{eq:innov}\\
+  S_t &= C\,P_{t|t-1}\,C^\top + R,
+    &\text{(innovation covariance)} \label{eq:S}\\
+  K_t &= P_{t|t-1}\,C^\top\,S_t^{-1},
+    &\text{(Kalman gain)} \label{eq:gain}\\
+  \hat{\bm{x}}_{t|t} &= \hat{\bm{x}}_{t|t-1} + K_t\,\bm{\nu}_t,
+    &\text{(filtered mean)} \label{eq:xfilt}\\
+  P_{t|t} &= (I - K_t C)\,P_{t|t-1}.
+    &\text{(Riccati update)} \label{eq:Pfilt}
+\end{align}
+
+\subsubsection{Kalman Gain via Linear Solve}
+
+The gain is \emph{not} computed using an explicit matrix inverse.
+Instead, the code solves a linear system:
+
+\begin{lstlisting}[caption={Gain computation via \py{tf.linalg.solve}.}]
+CP = tf.matmul(self.C, self.P)        # (m, n)
+K_T = tf.linalg.solve(S, CP)          # S @ K^T = CP
+K = tf.transpose(K_T)                 # (n, m)
+\end{lstlisting}
+
+\py{tf.linalg.solve} internally calls LAPACK's \texttt{dgesv}
+(LU with partial pivoting), which is both faster and more numerically
+stable than forming $S^{-1}$ via \py{tf.linalg.inv}.  The latter
+computes all columns of the inverse even though only $CP$ is needed.
+
+\subsubsection{Joseph-Stabilised Update (Optional)}
+
+When \py{joseph=True}, the covariance update uses the
+symmetry-preserving Joseph form:
+\begin{equation}
+  P_{t|t} = (I - K_tC)\,P_{t|t-1}\,(I - K_tC)^\top
+           + K_t\,R\,K_t^\top.
+  \label{eq:joseph}
+\end{equation}
+This is algebraically identical to the Riccati form
+Eq.~\eqref{eq:Pfilt} but better preserves positive-definiteness
+under floating-point rounding.
+
+\begin{lstlisting}[caption={Joseph form implementation.}]
+if joseph:
+    IKC = I - tf.matmul(K, self.C)
+    self.P = tf.matmul(IKC,
+                tf.matmul(self.P, IKC, transpose_b=True)) \
+           + tf.matmul(K, tf.matmul(self.R, K, transpose_b=True))
+else:
+    self.P = tf.matmul(I - tf.matmul(K, self.C), self.P)
+\end{lstlisting}
+
+\subsection{The \py{filter} Method}
+
+Iterates predict--update over all $N$ measurements:
+
+\begin{lstlisting}[caption={Full filtering loop.}]
+def filter(self, Z, *, joseph=False, use_solve=True):
+    for t in range(N):
+        xp, Pp = self.predict()
+        xf, Pf, *_ = self.update(Z[t], joseph=joseph,
+                                  use_solve=use_solve)
+    return {"x_pred": ..., "P_pred": ...,
+            "x_filt": ..., "P_filt": ...}
+\end{lstlisting}
+
+Returns stacked tensors of shape $(N, n, 1)$ for means and
+$(N, n, n)$ for covariances, enabling vectorised post-processing.
+
+
+% ══════════════════════════════════════════════════════════════════
+\section{Metrics (\file{accuracy.py})}
+% ══════════════════════════════════════════════════════════════════
+
+Only \py{compute_rmse} is used by the KF experiment.  The other
+functions (NEES, NIS, NLL, innovation whiteness) are consumed by the
+EKF/UKF experiments downstream.
+
+\subsection{\py{compute_rmse}}
+
+\begin{lstlisting}[caption={RMSE implementation.}]
+def compute_rmse(estimates, ground_truth):
+    if estimates.shape.ndims == 3:
+        estimates = tf.squeeze(estimates, axis=-1)
+    return float(tf.sqrt(tf.reduce_mean(
+               (estimates - ground_truth) ** 2)))
+\end{lstlisting}
+
+\begin{equation}
+  \text{RMSE} = \sqrt{\frac{1}{N \cdot d}\sum_{t=1}^{N}
+    \|\hat{\bm{x}}_t - \bm{x}_t\|^2}.
+  \label{eq:rmse}
+\end{equation}
+
+The experiment computes two separate RMSE values:
+\begin{itemize}
+\item \textbf{Position RMSE}: using dimensions $(p_x, p_y)$,
+      i.e.\ columns 0 and 2.
+\item \textbf{Velocity RMSE}: using dimensions $(v_x, v_y)$,
+      i.e.\ columns 1 and 3.
+\end{itemize}
+
+\paragraph{TensorFlow detail.}
+\py{tf.squeeze(estimates, axis=-1)} removes the trailing
+singleton dimension $(N, n, 1) \to (N, n)$ so that element-wise
+subtraction broadcasts correctly against the $(N, n)$ ground truth.
+
+
+% ══════════════════════════════════════════════════════════════════
+\section{Experiment Script}
+\label{sec:experiment}
+% ══════════════════════════════════════════════════════════════════
+
+\file{exp\_part1\_1a\_lgssm\_kf.py} is a self-contained driver with
+a single public function and a CLI entry point.
+
+\subsection{\py{run_experiment(config_path, out_dir)}}
+
+\begin{enumerate}
+\item \textbf{Load \& generate}: calls \py{generate_lgssm_from_yaml}.
+\item \textbf{Reshape $\bm{m}_0$}: ensures the initial state is
+  $(n, 1)$.  A try/except handles both static and dynamic TF shapes:
+
+\begin{lstlisting}[caption={Shape handling for dynamic graphs.}]
+try:
+    if model.m0.shape.ndims == 1:
+        x0_reshaped = tf.reshape(model.m0, [-1, 1])
+    else:
+        x0_reshaped = model.m0
+except (AttributeError, ValueError):
+    x0_rank = tf.rank(model.m0)
+    x0_reshaped = tf.cond(tf.equal(x0_rank, 1),
+                   lambda: tf.reshape(model.m0, [-1, 1]),
+                   lambda: model.m0)
+\end{lstlisting}
+
+The first branch uses \py{.shape.ndims} (a Python integer available
+in eager mode).  The fallback uses \py{tf.rank} and \py{tf.cond},
+which work inside \py{@tf.function} graphs where static shape info
+may be unavailable.
+
+\item \textbf{Filter}: \py{kf.filter(Y_obs)}.
+\item \textbf{Extract components}:
+
+\begin{lstlisting}[caption={Splitting position and velocity.}]
+xf = tf.squeeze(out["x_filt"], axis=-1)   # (N, 4)
+xf_pos = tf.stack([xf[:, 0], xf[:, 2]], axis=1)  # (N, 2)
+xf_vel = tf.stack([xf[:, 1], xf[:, 3]], axis=1)  # (N, 2)
+\end{lstlisting}
+
+\item \textbf{Compute RMSE}: separately for position and velocity.
+\item \textbf{Save CSV}: one row per timestep with all true, observed,
+  and filtered values.
+\item \textbf{Plot}: four-panel matplotlib figure (position $x$,
+  position $y$, velocity $v_x$, velocity $v_y$).
+\end{enumerate}
+
+\subsection{CLI Interface}
+
+\begin{lstlisting}[language=bash,style=py]
+python -m src.experiments.exp_part1_1a_lgssm_kf \
+    --config configs/ssm_linear.yaml \
+    --out_dir reports/1_LinearGaussianSSM/figures
+\end{lstlisting}
+
+
+% ══════════════════════════════════════════════════════════════════
+\section{TensorFlow API Summary}
+% ══════════════════════════════════════════════════════════════════
+
+Table~\ref{tab:tf} lists every TensorFlow function used in the KF
+pipeline and explains why it was chosen.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{4.8cm}p{8.2cm}@{}}
+\toprule
+\textbf{TF Function} & \textbf{Role \& Rationale} \\
+\midrule
+\py{tf.matmul(A, B, transpose_b=True)}
+  & Fused $AB^\top$; avoids allocating the transpose. \\
+\py{tf.linalg.solve(S, CP)}
+  & Computes $S^{-1}(CP)$ via LU factorisation;
+    numerically superior to explicit \py{tf.linalg.inv}. \\
+\py{tf.linalg.inv(S)}
+  & Fallback gain path (disabled by default). \\
+\py{tf.linalg.cholesky(P0)}
+  & Lower-triangular factor for sampling
+    $\bm{x}_0 \sim \mathcal{N}(\bm{m}_0, P_0)$. \\
+\py{tf.linalg.diag(v)}
+  & Builds diagonal $P_0$ and $Q$/$R$ from config vectors. \\
+\py{tf.eye(n)}
+  & Identity matrix for $(I - KC)P$ and Joseph form. \\
+\py{tf.reshape(x, [-1, 1])}
+  & Ensures column-vector shape for \py{matmul}. \\
+\py{tf.squeeze(x, axis=-1)}
+  & Removes trailing singleton $(N,n,1) \to (N,n)$. \\
+\py{tf.stack(list, axis=0)}
+  & Stacks per-timestep results into batch tensor. \\
+\py{tf.convert_to_tensor}
+  & Normalises numpy/list inputs to TF tensors. \\
+\py{tf.rank}, \py{tf.cond}
+  & Graph-safe dynamic shape dispatch. \\
+\py{tf.reduce_mean}, \py{tf.sqrt}
+  & RMSE computation. \\
+\py{tfd.MultivariateNormalTriL}
+  & Cholesky-parameterised Gaussian for initial state. \\
+\py{tfd.MultivariateNormalDiag}
+  & Diagonal Gaussian for i.i.d.\ process/measurement noise. \\
+\bottomrule
+\end{tabular}
+\caption{TensorFlow functions and their roles in the KF pipeline.}
+\label{tab:tf}
+\end{table}
+
+
+% ══════════════════════════════════════════════════════════════════
+\section{Interaction Diagram}
+% ══════════════════════════════════════════════════════════════════
+
+The call graph for a single experiment run:
+
+\begin{verbatim}
+exp_part1_1a_lgssm_kf.run_experiment()
+  |
+  +-> generators.generate_lgssm_from_yaml(config_path)
+  |     +-> generators._parse_yaml_simple(config_path)
+  |     +-> LGSSM.from_config(cfg)      # builds A,B,C,D,Q,R,P0
+  |     +-> LGSSM.sample(N, seed)       # generates X_true, Y_obs
+  |
+  +-> KalmanFilter.__init__(A, C, x0, P0, Q, R)
+  |
+  +-> KalmanFilter.filter(Y_obs)
+  |     +-- for t in range(N):
+  |           +-> KalmanFilter.predict()    # Eqs. (3)-(4)
+  |           +-> KalmanFilter.update(z_t)  # Eqs. (5)-(9)
+  |
+  +-> accuracy.compute_rmse(xf_pos, X_true_pos)
+  +-> accuracy.compute_rmse(xf_vel, X_true_vel)
+  |
+  +-> matplotlib: save 4-panel figure
+  +-> CSV: save tabular results
+\end{verbatim}
+
+
+% ══════════════════════════════════════════════════════════════════
+\section{Design Decisions \& Potential Improvements}
+% ══════════════════════════════════════════════════════════════════
+
+\begin{enumerate}
+\item \textbf{Eager-mode loop.}
+  The \py{for t in range(N)} loop in \py{filter()} runs in eager
+  mode.  For $N=200$ this is negligible, but for longer sequences a
+  \py{tf.while_loop} or \py{tf.scan} would enable XLA compilation.
+
+\item \textbf{$P_0$ initialisation.}
+  The current diagonal $P_0$ is hand-tuned.  Alternatives include:
+  \begin{itemize}
+  \item \emph{Diffuse prior}: $P_0 = \alpha I$ with large $\alpha$.
+  \item \emph{Steady-state DARE}: solve the Discrete Algebraic
+        Riccati Equation for the asymptotic $P$.
+  \item \emph{Physics-informed}:
+        $\sigma_{p} = \sigma_z$,
+        $\sigma_{v} = \sigma_z / \Delta t$.
+  \end{itemize}
+
+\item \textbf{Joseph form.}
+  The default Riccati update is fine for double precision but can
+  lose positive-definiteness in single precision (\py{float32}).
+  Setting \py{joseph=True} prevents this at the cost of one extra
+  matrix multiply.
+
+\item \textbf{Linear solve vs inverse.}
+  The \py{use_solve=True} default is the correct modern choice.
+  The \py{tf.linalg.inv} path exists only as a pedagogical reference
+  and should not be used in production.
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════════════════════════
+\section{Conclusion}
+% ══════════════════════════════════════════════════════════════════
+
+This document traced the complete execution path of the KF experiment
+from YAML configuration to CSV/PNG output.  The pipeline is
+intentionally simple---six files, no training loop, no gradient
+tape---because the KF serves as the \emph{analytical ground truth}
+for the linear-Gaussian case.  Every subsequent filter in the project
+(EKF, UKF, bootstrap PF, LEDH, EDH, Dai--Daum) is benchmarked
+against this baseline, making correctness here critical.
+
+\end{document}

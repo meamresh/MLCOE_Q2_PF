@@ -1,0 +1,31 @@
+==============================================================================================================
+Vehtari comparison — vanilla HMC vs LHNN HMC
+==============================================================================================================
+vanilla_dir : reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/new/svssm_hmc_sweep_wide_T200
+lhnn_dir    : reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/svssm_hmc_lhnn_T200_nuts_depth3
+truth       : mu=0.0, phi=0.95, sigma_eta=0.3
+
+Wall + cost:
+  Vanilla wall                : 39841.9 s
+  LHNN wall                   : 6916.7 s
+  Speedup (wall)              : 5.76×
+  Vanilla real ∇log π evals   : 64800
+  LHNN total real ∇log π evals: 25260 (3660 pilot + 21600 fallback)
+  Grad-eval savings           : 61.0%
+
+Vehtari per parameter:
+param          method         median         sd       2.5%      97.5%  rank-R̂   bulkESS   tailESS  flags
+--------------------------------------------------------------------------------------------------------------
+mu             vanilla        0.2262     0.9384    -2.0505     1.9333    1.008     437.1     599.9  PASS
+mu             lhnn           0.1463     0.5588    -0.9768     1.3495    1.053     126.5     228.1  R̂,bulk,tail
+phi            vanilla        0.9536     0.3677    -0.7030     0.9982    1.028     258.8     400.4  R̂,bulk
+phi            lhnn           0.9203     0.0632     0.7623     0.9828    1.042      86.2     281.4  R̂,bulk,tail
+sigma_eta_sq   vanilla        0.1012     0.2283     0.0040     0.9825    1.022     284.5     492.1  R̂,bulk
+sigma_eta_sq   lhnn           0.1806     0.1215     0.0386     0.5046    1.031      76.9     249.0  R̂,bulk,tail
+
+Posterior agreement (KS p>0.05 ⇒ indistinguishable):
+param             |Δmedian|   sd_ratio   KS_stat      KS_p  verdict
+mu                   0.0799      0.596     0.117    0.0000  DIFFER
+phi                  0.0334      0.172     0.291    0.0000  DIFFER
+sigma_eta_sq         0.0794      0.532     0.311    0.0000  DIFFER
+==============================================================================================================

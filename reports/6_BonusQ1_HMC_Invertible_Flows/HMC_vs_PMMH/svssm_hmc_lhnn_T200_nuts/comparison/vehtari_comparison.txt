@@ -1,0 +1,31 @@
+==============================================================================================================
+Vehtari comparison — vanilla HMC vs LHNN HMC
+==============================================================================================================
+vanilla_dir : reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/new/svssm_hmc_sweep_wide_T200
+lhnn_dir    : reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/svssm_hmc_lhnn_T200_nuts
+truth       : mu=0.0, phi=0.95, sigma_eta=0.3
+
+Wall + cost:
+  Vanilla wall                : 39841.9 s
+  LHNN wall                   : 9207.1 s
+  Speedup (wall)              : 4.33×
+  Vanilla real ∇log π evals   : 64800
+  LHNN total real ∇log π evals: 25260 (3660 pilot + 21600 fallback)
+  Grad-eval savings           : 61.0%
+
+Vehtari per parameter:
+param          method         median         sd       2.5%      97.5%  rank-R̂   bulkESS   tailESS  flags
+--------------------------------------------------------------------------------------------------------------
+mu             vanilla        0.2262     0.9384    -2.0505     1.9333    1.008     437.1     599.9  PASS
+mu             lhnn           0.1362     0.5849    -1.0698     1.3858    1.025     348.3     425.3  R̂,bulk
+phi            vanilla        0.9536     0.3677    -0.7030     0.9982    1.028     258.8     400.4  R̂,bulk
+phi            lhnn           0.9388     0.0531     0.7901     0.9905    1.015     206.6     438.5  R̂,bulk
+sigma_eta_sq   vanilla        0.1012     0.2283     0.0040     0.9825    1.022     284.5     492.1  R̂,bulk
+sigma_eta_sq   lhnn           0.1360     0.1052     0.0237     0.4249    1.015     200.1     391.8  R̂,bulk,tail
+
+Posterior agreement (KS p>0.05 ⇒ indistinguishable):
+param             |Δmedian|   sd_ratio   KS_stat      KS_p  verdict
+mu                   0.0900      0.623     0.098    0.0000  DIFFER
+phi                  0.0149      0.144     0.204    0.0000  DIFFER
+sigma_eta_sq         0.0348      0.461     0.218    0.0000  DIFFER
+==============================================================================================================

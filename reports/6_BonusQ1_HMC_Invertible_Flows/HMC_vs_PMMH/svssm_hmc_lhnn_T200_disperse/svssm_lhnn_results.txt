@@ -1,0 +1,34 @@
+==============================================================================================================
+SVSSM L-HNN HMC (DISPERSE pilot) Recovery Report
+==============================================================================================================
+TF 2.16.2, TFP 0.24.0
+truth: mu=0.0, phi=0.95, sigma_eta=0.3
+T=200 N=64 L=5 step_size=0.01
+num_chains=4 burnin=200 results=2500
+DISPERSE PILOT: K=8 anchors, dispersion=1.5, traj_per_anchor=8, steps=60
+Total wall: 7030.7s (pilot 4172.7, train 145.0, sample 2713.1)
+
+param                       truth       mean        std     median       2.5%      97.5%     Rhat      ESS    bias%
+------------------------------------------------------------------------------------------------------------------------
+mu                         0.0000    -0.3830     1.3442    -0.4816    -2.6716     2.0748    1.988     -0.0    +nan%
+phi                        0.9500     0.9742     0.0199     0.9771     0.9264     0.9985    1.316    -16.4    +2.5%
+sigma_eta_sq               0.0900     0.0647     0.0510     0.0558     0.0043     0.1935    1.311     -0.0   -28.1%
+sigma_eta (derived)        0.3000     0.2329     0.1022     0.2363     0.0659     0.4399      nan      nan   -22.4%
+
+Accept per chain: [0.7663999795913696, 0.8399999737739563, 0.6692000031471252, 0.8560000061988831]
+Overall accept:   0.783
+
+Gradient-eval accounting:
+  Pilot evals (disperse): 3904
+  Sampling fallback ev. : 0
+  Total LHNN cost       : 3904
+  Vanilla HMC cost      : 64800
+  Saved                 : 60896 (94.0%)
+
+Agreement vs vanilla T=200 baseline:
+param              lhnn_med   base_med     |Δmed|   sd_ratio       KS_p  verdict
+mu                  -0.4816     0.2262     0.7078      1.432     0.0000  DIFFER
+phi                  0.9771     0.9536     0.0235      0.054     0.0000  DIFFER
+sigma_eta_sq         0.0558     0.1012     0.0454      0.223     0.0000  DIFFER
+
+==============================================================================================================

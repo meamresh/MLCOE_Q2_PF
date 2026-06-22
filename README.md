@@ -1,10 +1,59 @@
-# Particle Flow Filters & Differentiable Particle Filtering (DPF)
+## Interview resubmission (SVSSM) — read this first
 
-By **Amresh Verma**_
+The focused deliverable for the interview is the **SVSSM parameter-estimation
+pipeline** (differentiable particle-filter likelihood → HMC in TFP → posterior
+analysis, with a neural-operator OT resampler and an L-HNN sampler accelerator).
+
+- **`interview_answers.pdf`** — the submission. Answers each question in turn
+  (JIT/efficiency & the cost of differentiating Sinkhorn; parameter recovery 1D→d;
+  the initial condition `h_0`; the additive model `A`; identifiability & restrictions;
+  neural-operator design and training; L-HNN acceleration). Self-contained — every
+  number is in-line. Source: `interview_answers.tex`.
+- **`results_traceability.md`** — full index: every reported number/table → the exact
+  script, data directory, and command that produces it.
+
+### Reproduce the fast results (laptop, seconds–minutes each)
+
+```bash
+export PYTHONPATH="$PWD:${PYTHONPATH:-}"
+
+# JIT / no-retracing / N-scaling on the SVSSM filters (d=1 and d=2)
+python3 scripts/profile_section1_svssm.py
+python3 scripts/profile_section1_svssm_multi.py
+python3 scripts/verify_no_retracing_svssm.py
+
+# h_0 initial-condition ablation
+python3 scripts/exp/ablate_init_h0.py
+
+# V2 additive-model identifiability (1D ridge, three-way fixes, d=2 FREE/FIXED A)
+python3 scripts/exp/exp_v2_identifiability_demo.py
+python3 scripts/exp/exp_v2_three_way_fixes.py
+python3 scripts/exp/exp_v2_multivariate_demo.py && python3 scripts/exp/analyze_v2_mv_vehtari.py
+```
+
+The longer HMC / HPC runs (1D wide-prior sweep, d=2 L-HNN+NN-OT T-sweep, the
+L-HNN benchmark) have their commands in `results_traceability.md`.
+
+The interview SVSSM filters live in **`src/filters/bonus/extra_bonus/`**
+(`differentiable_ledh_svssm.py` 1D, `…_svssm_multivariate.py` d≥2,
+`…_neural_ot_svssm.py` NN-OT); HMC drivers + parallel launchers are in
+`scripts/exp/` (`exp_hmc_svssm*.py`, `launch_*`, `run_*`).
+
+Environment: TensorFlow 2.16.2, TFP 0.24.0 (CPU for the profiling numbers). The
+particle filter uses fixed common-random-number seeds, so log-likelihoods/gradients
+reproduce up to XLA/platform numerics; HMC posteriors reproduce given the same
+`--data_seed` / `--base_seed`.
+
+---
+
+# [Previous Submission] Particle Flow Filters & Differentiable Particle Filtering (DPF)
+
+By **Amresh Verma**
 
 > This project implements and compares classical state-space filtering, particle filters, **particle flow** methods (EDH/LEDH, invertible PF-PF), **kernel-embedded particle flow** for higher dimensions, **differentiable particle filtering** with entropy-regularized optimal transport (Sinkhorn), **HMC-based inference** (standard & L-HNN accelerated), and **neural optimal transport** for learned resampling.
 
 ---
+
 
 ## Goals & Deliverables
 
@@ -34,37 +83,42 @@ By **Amresh Verma**_
 
 ```text
 MLCOE_Q2_PF/
+├── interview_answers.tex / .pdf    # Interview resubmission (the focused deliverable)
+├── results_traceability.md         # Every reported number -> script + data + command
 ├── configs/                        # Model & experiment configs
 ├── scripts/
 │   ├── run_part1.sh                # Part 1 experiments (9 tasks)
 │   ├── run_part2.sh                # Part 2 experiments (5 tasks)
 │   ├── run_bonus.sh                # Bonus experiments (8 tasks)
-│   └── run_tests.sh                # Run all tests
+│   ├── run_tests.sh                # Run all tests
+│   ├── profile_section1_svssm*.py  # SVSSM JIT / no-retracing / N-scaling profiling
+│   ├── verify_no_retracing_svssm.py
+│   ├── check_prior_dominance.py, save_diagnostics_multi_full_phi.py   # diagnostics
+│   └── exp/                        # HMC drivers (exp_hmc_svssm*.py), parallel launchers
+│                                   #   (launch_*, run_*), operator training (phase16_*,
+│                                   #   phase4_loss_modes.py), V2 demos (exp_v2_*)
 ├── src/
 │   ├── data/                       # Synthetic data generators
 │   ├── models/                     # SSM definitions (LGSSM, range-bearing, Lorenz-96,
 │   │                               #   multi-target acoustic, Dai-Daum, Kitagawa, SSL)
-│   ├── filters/                    # Filter implementations
-│   │   ├── kalman / ekf / ukf      # Classical filters
-│   │   ├── edh / ledh              # Exact & Local Daum-Huang flows
-│   │   ├── pfpf_filter             # Particle Flow Particle Filter (LEDH/EDH)
-│   │   ├── pff_kernel              # Kernel-embedded PFF
-│   │   ├── spf_dai_daum            # Stochastic Particle Flow (Dai & Daum)
+│   ├── filters/                    # Filter implementations (kalman/ekf/ukf, edh/ledh,
+│   │   │                           #   pfpf_filter, pff_kernel, spf_dai_daum are .py here)
 │   │   ├── dpf/                    # Differentiable PF (Sinkhorn OT, transformer)
-│   │   └── bonus/                  # HMC, L-HNN, PMMH, Neural OT, SSL inference
+│   │   └── bonus/                  # HMC, L-HNN (lhnn_nuts, lhnn_hmc_pf), Neural OT
+│   │       │                       #   (deeponet_ot, mgradnet_ot), PMMH, SSL inference
+│   │       └── extra_bonus/        # *** Interview SVSSM filters ***
+│   │                               #   differentiable_ledh_svssm.py (1D),
+│   │                               #   ..._svssm_multivariate.py (d>=2),
+│   │                               #   ..._neural_ot_svssm.py (NN-OT), training harness
 │   ├── metrics/                    # RMSE, NEES, ESS, stability checks
 │   ├── experiments/                # 19 experiment runners (exp_part{1,2,3}_*.py)
 │   └── utils/                      # Linear algebra, logging, experiment helpers
-├── tests/                          # 28 unit & integration tests (452 tests total)
+├── tests/                          # Unit & integration tests
+├── docs/  examples/  Reads/        # Notes, worked examples, run instructions
 └── reports/                        # Generated outputs
-    ├── 1_LinearGaussianSSM/
-    ├── 2_Nonlinear_NonGaussianSSM/
-    ├── 3_Deterministic_Kernel_Flow/
-    ├── 4_Stochastic_Particle_Flow/
-    ├── 5_Differential_PF_OT_Resampling/
-    ├── 6_BonusQ1_HMC_Invertible_Flows/
-    ├── 7_BonusQ2_NeuralOT/
-    └── 8_BonusQ3_SSL_Comparison/
+    ├── 1_LinearGaussianSSM/  ...  8_BonusQ3_SSL_Comparison/   # Parts 1-3 outputs
+    │   └── 6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/        # interview run outputs live here
+    └── d1_* / d2_* / bench_*       # ad-hoc SVSSM run dirs (d=1/d=2 sweeps, benchmarks)
 ```
 
 ---

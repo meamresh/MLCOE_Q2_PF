@@ -1,0 +1,40 @@
+==============================================================================================================
+SVSSM L-HNN NUTS Recovery Report
+==============================================================================================================
+TF 2.16.2, TFP 0.24.0
+truth: mu=0.0, phi=0.95, sigma_eta=0.3
+T=200 N=64 step_size=0.01 max_treedepth=7
+num_chains=4 burnin=200 results=2500
+Pilot: 60 traj × 60 steps (single anchor)
+Total wall: 8382.4s (pilot 0.0, train 0.0, sample 8382.4)
+
+NUTS diagnostics:
+  Error triggers per chain : [0, 0, 0, 0]
+  Real grad evals per chain: [5400, 5400, 5400, 5400]
+  LHNN leapfrog steps/chain: [677016, 656636, 677304, 669592]
+  Avg tree depth per chain : ['6.98', '6.92', '6.98', '6.95']
+
+param                       truth       mean        std     median       2.5%      97.5%     Rhat      ESS    bias%
+------------------------------------------------------------------------------------------------------------------------
+mu                         0.0000     0.1270     0.5836     0.1201    -1.0554     1.3470    1.010    -24.0    +nan%
+phi                        0.9500     0.9169     0.0571     0.9302     0.7694     0.9882    1.008     -0.1    -3.5%
+sigma_eta_sq               0.0900     0.1847     0.1195     0.1599     0.0268     0.4677    1.008     -0.0  +105.3%
+sigma_eta (derived)        0.3000     0.4082     0.1345     0.3999     0.1636     0.6839      nan      nan   +36.1%
+
+Accept per chain: [0.6399999856948853, 0.5716000199317932, 0.6304000020027161, 0.6100000143051147]
+Overall accept:   0.613
+
+Gradient-eval accounting:
+  Pilot evals               : 0
+  Sum chain real grads      : 21600
+  Total real grad evals     : 21600
+  Vanilla HMC L=5 equivalent: 64800
+  Saved                     : 43200 (66.7%)
+
+Agreement vs vanilla T=200 baseline:
+param              lhnn_med   base_med     |Δmed|   sd_ratio       KS_p  verdict
+mu                   0.1201     0.2262     0.1061      0.622     0.0000  DIFFER
+phi                  0.9302     0.9536     0.0234      0.155     0.0000  DIFFER
+sigma_eta_sq         0.1599     0.1012     0.0587      0.524     0.0000  DIFFER
+
+==============================================================================================================

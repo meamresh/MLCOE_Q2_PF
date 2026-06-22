@@ -1,0 +1,56 @@
+=====================================================================================
+SVSSM HMC aggregate (reloaded)  |  source=svssm_hmc_samples.npz
+SVSSM (Gaussian quasi-likelihood LEDH). Priors: see original HMC script.
+Chains: 4  |  samples/chain: 10000  |  burn/chain: 2000
+=====================================================================================
+Metric                                              SVSSM HMC
+-------------------------------------------------------------------------------------
+Acceptance rate (post-burn-in est.)                     0.748
+ESS (mu)                                              40000.0
+ESS (phi)                                              3861.5
+ESS (sigma_eta_sq)                                    40000.0
+Mean ESS                                              27953.8
+Runtime (s)                                           11025.3
+ESS/s                                                  2.5354
+Cost per step (s/proposal)                             0.2297
+-------------------------------------------------------------------------------------
+Mean mu                                               -0.2283  (true=0.0000)
+Mean phi                                               0.9410  (true=0.9500)
+Mean sigma_eta_sq                                      0.1681  (true=0.0900)
+Std mu                                                 0.8838
+Std phi                                                0.0599
+Std sigma_eta_sq                                       0.1671
+-------------------------------------------------------------------------------------
+Quality vs ground truth (pooled posterior):
+  RMSE (mu                ) 0.912821
+  MAE  (mu                ) 0.726582
+  RMSE (phi               ) 0.060585
+  MAE  (phi               ) 0.036768
+  RMSE (sigma_eta_sq      ) 0.184481
+  MAE  (sigma_eta_sq      ) 0.106071
+=====================================================================================
+
+Multi-chain convergence diagnostics  (Vehtari et al., 2021)
+  bulk-ESS = ESS of rank-normalised split chains.
+  tail-ESS = ESS at the 5/95 percentile indicators.
+  splitR^  = classic Gelman-Rubin R-hat with half-chain split.
+  rankR^   = max(rank-normalised, folded rank-normalised) split R-hat.
+  Pass: rankR^ < 1.01 AND bulk-ESS > 400 AND tail-ESS > 400 per param.
+
+============================================================================================
+  Diagnostics — SVSSM HMC (reloaded chains)   (chains=4, samples/chain=10000, CI level=95%)
+--------------------------------------------------------------------------------------------
+param              mean        std   bulk-ESS   tail-ESS    ESS%   splitR^    rankR^                 95% CI      truth   covers?    ok
+--------------------------------------------------------------------------------------------
+mu               -0.228      0.884    40000.0     1474.0  100.0%     1.000     1.005        [-1.929, 1.520]      0.000       YES  PASS
+phi               0.941      0.060     4024.0      758.7   10.1%     1.001     1.002         [0.779, 0.992]      0.950       YES  PASS
+sigma_eta_sq      0.168      0.167    40000.0      963.2  100.0%     1.000     1.005         [0.019, 0.614]      0.090       YES  PASS
+--------------------------------------------------------------------------------------------
+  Overall verdict : CONVERGED
+  Coverage        : all true values inside 95% CI
+============================================================================================
+
+Notes:
+ - Harvey-Ruiz-Shephard quasi-likelihood often biases sigma_eta upward;
+   sigma_eta_sq posterior vs truth is informative but may miss coverage.
+=====================================================================================

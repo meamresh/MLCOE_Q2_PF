@@ -1,0 +1,30 @@
+Prior-vs-posterior shrinkage check — full-Phi V1 multivariate
+Run: reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/svssm_hmc_multivariate_full_phi_prod_xla
+chains=4  draws=1000
+Shrinkage = 1 - post_SD/prior_SD  (1.0=full collapse, 0=no learning)
+|shift|   = |post_mean - prior_mean| / prior_SD  (z-units)
+
+param               prior med  prior SD  post med   post SD   shrink  |shift|               verdict     truth
+-------------------------------------------------------------------------------------------------------------
+mu_0                   -0.200     1.001    -0.137     0.802   +0.199    0.111       prior-dominated    +0.000
+mu_1                   -0.200     1.001    +0.028     0.496   +0.504    0.227      data informative    -0.300
+phi_diag_0             +0.905     0.375    +0.916     0.186   +0.502    0.306      data informative    +0.950
+phi_diag_1             +0.905     0.375    +0.811     0.346   +0.077    0.158       prior-dominated    +0.850
+phi_off_01             +0.001     0.200    -0.016     0.175   +0.123    0.072       prior-dominated    +0.050
+sigma_eta_sq_0         +0.136     0.287    +0.163     0.228   +0.206    0.052              moderate    +0.090
+sigma_eta_sq_1         +0.136     0.287    +0.130     0.142   +0.507    0.187      data informative    +0.160
+-------------------------------------------------------------------------------------------------------------
+
+DERIVED STATIONARY COVARIANCE
+param               prior med  prior SD  post med   post SD   shrink  |shift|               verdict     truth
+-------------------------------------------------------------------------------------------------------------
+Sigma_h_00             +2.184226516.151    +1.625     0.998   +1.000    0.019      data informative    +1.062
+Sigma_h_11             +0.821    65.943    +0.426     0.471   +0.993    0.121      data informative    +0.577
+Sigma_h_01             +0.000   868.683    -0.002     0.327   +1.000    0.004      data informative    +0.127
+rho_h                  +0.000     0.488    -0.005     0.276   +0.435    0.063              moderate    +0.163
+-------------------------------------------------------------------------------------------------------------
+
+Notes on shrinkage thresholds:
+ >0.5  : data has clearly overridden the prior
+ 0.2-0.5: moderate update; data + prior both contribute
+ <0.2  : posterior ≈ prior  — defer claims about this param

@@ -1,0 +1,29 @@
+====================================================================================================
+Differentiable LEDH Gradient Stability Diagnostics
+====================================================================================================
+T=30
+num_particles=50
+n_lambda=20
+sinkhorn_epsilon=1.0
+sinkhorn_iters=10
+resample_threshold=0.5
+n_seeds=20
+theta_grid=10,1;8,1.5;12,0.8
+grad_clip_norm=0.0
+
+method           theta                fin_ll   fin_g     ll_cv      g_cv  log10MAD    vecSNR   cosMean       gmean   elapsed
+----------------------------------------------------------------------------------------------------
+generic_pfpf     (2.303,0.000)          1.00    0.90       2.2      3.24      2.42     0.281     0.251    1.16e+15     11.18
+generic_pfpf     (2.079,0.405)          1.00    0.90      2.11      3.67      2.46     0.265     0.114    7.24e+12      9.22
+generic_pfpf     (2.485,-0.223)         1.00    0.90      1.98      2.24      1.64    0.0934    -0.225    1.62e+13      9.74
+legacy_ledh      (2.303,0.000)          1.00    1.00    0.0146      1.64     0.662     0.222    0.0189    9.74e+05      2.08
+legacy_ledh      (2.079,0.405)          1.00    1.00    0.0118      2.89     0.259     0.252    -0.034    2.31e+06      0.36
+legacy_ledh      (2.485,-0.223)         1.00    1.00   0.00934      1.74     0.566     0.303     0.235    5.65e+05      0.36
+----------------------------------------------------------------------------------------------------
+Interpretation:
+- finite_grad_rate < 1 indicates crashes, NaNs, or disconnected gradients.
+- high grad_norm_cv means gradient magnitude changes strongly across CRN seeds.
+- high MAD(log10 ||grad||) means order-of-magnitude gradient instability.
+- low vector SNR means CRN noise dominates the mean gradient direction.
+- low cosine-to-mean means gradient directions disagree across seeds.
+====================================================================================================

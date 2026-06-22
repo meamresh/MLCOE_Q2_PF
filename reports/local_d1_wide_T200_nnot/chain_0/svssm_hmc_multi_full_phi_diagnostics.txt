@@ -1,0 +1,36 @@
+Vehtari diagnostics — full-Phi V1 multivariate HMC
+Run: reports/local_d1_wide_T200_nnot/chain_0
+chains=1  draws=750  d=1
+Thresholds: relaxed rank-Rhat <= 1.05; strict rank-Rhat <= 1.01 AND bulk/tail-ESS >= 400
+
+RUN CONFIGURATION
+-------------------------------------------------------------------------------------------------------
+  truth mu          : [0.0]
+  truth phi_diag    : [0.949999988079071]
+  truth phi_off     : []
+  truth sigma_eta_sq: [0.09000000357627869]
+  T=200  N=64  L=5  n_lambda=10  step_size=0.01  num_burnin=200  num_results=750
+  prior mu       ~ N(2.0, 3.0^2)
+  prior phi_raw  ~ N(0.0, 2.0^2)  [phi_diag = tanh(phi_raw)]
+  prior phi_off  ~ N(0, 0.2^2)
+  prior log_sig2 ~ N(1.5, 3.0^2)
+  data_seed=42  base_seed=300  dense_mass=True
+
+RAW PARAMETERS
+-------------------------------------------------------------------------------------------------------
+quantity                     truth     median       2.5%      97.5%  rank-Rhat  bulk-ESS  tail-ESS  cov
+-------------------------------------------------------------------------------------------------------
+mu_0                       +0.0000    +0.2233    -1.2171    +1.5838     1.0015       138       172    Y
+phi_diag_0                 +0.9500    +0.9538    +0.6506    +0.9974     1.0258        63       137    Y
+sigma_eta_sq_0             +0.0900    +0.0566    +0.0028    +0.3686     1.0493        64       100    Y
+-------------------------------------------------------------------------------------------------------
+
+DERIVED STATIONARY COVARIANCE Sigma_h = Phi Sigma_h Phi^T + Sigma_eta
+-------------------------------------------------------------------------------------------------------
+quantity                     truth     median       2.5%      97.5%  rank-Rhat  bulk-ESS  tail-ESS  cov
+-------------------------------------------------------------------------------------------------------
+Sigma_h_00                 +0.9231    +0.6535    +0.1559    +1.3802     1.0091       185       247    Y
+-------------------------------------------------------------------------------------------------------
+
+Raw params:     3/3 pass relaxed, 0/3 pass strict
+Derived (Sigma_h): 1/1 pass relaxed, 0/1 pass strict

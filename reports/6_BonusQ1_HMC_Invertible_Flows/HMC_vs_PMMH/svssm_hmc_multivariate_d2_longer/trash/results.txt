@@ -1,0 +1,76 @@
+==========================================================================================
+Multivariate SVSSM HMC aggregate (reloaded)  |  source=svssm_hmc_multi_samples.npz  d=2
+Multivariate SVSSM (d=2, diagonal Phi + diagonal Sigma_eta).
+Chains: 4  |  samples/chain: 10000  |  burn/chain: 2000
+==========================================================================================
+Metric                                       multivariate HMC
+------------------------------------------------------------------------------------------
+Acceptance rate (post-burn-in est.)                     0.785
+ESS (mu_0)                                              902.4
+ESS (mu_1)                                              699.3
+ESS (phi_0)                                            2260.5
+ESS (phi_1)                                            2248.0
+ESS (sigma_eta_sq_0)                                   1193.3
+ESS (sigma_eta_sq_1)                                   1014.2
+Mean ESS                                               1386.3
+Runtime (s)                                            3225.5
+ESS/s                                                  0.4298
+Cost per step (s/proposal)                             0.0672
+------------------------------------------------------------------------------------------
+Mean mu_0                                             -0.1402  (true=0.0000)
+Mean mu_1                                             -0.3573  (true=-0.3000)
+Mean phi_0                                             0.9368  (true=0.9500)
+Mean phi_1                                             0.9294  (true=0.8500)
+Mean sigma_eta_sq_0                                    0.1527  (true=0.0900)
+Mean sigma_eta_sq_1                                    0.1084  (true=0.1600)
+Std mu_0                                               0.8145
+Std mu_1                                               0.7696
+Std phi_0                                              0.0602
+Std phi_1                                              0.0674
+Std sigma_eta_sq_0                                     0.1310
+Std sigma_eta_sq_1                                     0.1026
+------------------------------------------------------------------------------------------
+Quality vs ground truth (pooled posterior):
+  RMSE (mu_0              ) 0.826490
+  MAE  (mu_0              ) 0.642880
+  RMSE (mu_1              ) 0.771698
+  MAE  (mu_1              ) 0.609236
+  RMSE (phi_0             ) 0.061616
+  MAE  (phi_0             ) 0.036782
+  RMSE (phi_1             ) 0.104136
+  MAE  (phi_1             ) 0.093982
+  RMSE (sigma_eta_sq_0    ) 0.145207
+  MAE  (sigma_eta_sq_0    ) 0.089293
+  RMSE (sigma_eta_sq_1    ) 0.114845
+  MAE  (sigma_eta_sq_1    ) 0.092656
+==========================================================================================
+
+Multi-chain convergence diagnostics  (Vehtari et al., 2021)
+  bulk-ESS = ESS of rank-normalised split chains.
+  tail-ESS = ESS at the 5/95 percentile indicators.
+  splitR^  = classic Gelman-Rubin R-hat with half-chain split.
+  rankR^   = max(rank-normalised, folded rank-normalised) split R-hat.
+  Pass: rankR^ < 1.01 AND bulk-ESS > 400 AND tail-ESS > 400 per param.
+
+============================================================================================
+  Diagnostics — Multivariate SVSSM HMC, d=2 (reloaded chains)   (chains=4, samples/chain=10000, CI level=95%)
+--------------------------------------------------------------------------------------------
+param              mean        std   bulk-ESS   tail-ESS    ESS%   splitR^    rankR^                 95% CI      truth   covers?    ok
+--------------------------------------------------------------------------------------------
+mu_0             -0.140      0.815      944.0      856.1    2.4%     1.001     1.003        [-1.888, 1.405]      0.000       YES  PASS
+mu_1             -0.357      0.770      824.7      796.0    2.1%     1.008     1.009        [-1.733, 1.300]     -0.300       YES  PASS
+phi_0             0.937      0.060     1911.0      305.7    4.8%     1.001     1.003         [0.768, 0.990]      0.950       YES  FAIL
+phi_1             0.929      0.067     2018.3      833.9    5.0%     1.003     1.005         [0.753, 0.989]      0.850       YES  PASS
+sigma_eta_sq_0      0.153      0.131      877.3      809.4    2.2%     1.012     1.023         [0.020, 0.485]      0.090       YES  FAIL
+sigma_eta_sq_1      0.108      0.103      813.4      709.2    2.0%     1.003     1.008         [0.013, 0.375]      0.160       YES  PASS
+--------------------------------------------------------------------------------------------
+  Overall verdict : NOT CONVERGED (rank-R^>=1.01 or ESS<400)
+  Coverage        : all true values inside 95% CI
+============================================================================================
+
+Notes:
+ - Harvey-Ruiz-Shephard quasi-likelihood often biases sigma_eta upward;
+   sigma_eta_sq posteriors vs truth are informative but may miss coverage.
+ - For non-diagonal Sigma_eta, expect rank-deficient boundary modes
+   (L_11 -> 0, implied rho -> 1) at small sample budgets; see Phase 15.
+==========================================================================================

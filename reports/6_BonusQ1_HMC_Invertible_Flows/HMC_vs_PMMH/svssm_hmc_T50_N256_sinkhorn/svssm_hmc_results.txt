@@ -1,0 +1,27 @@
+====================================================================================================
+SVSSM HMC Parameter Recovery Report
+====================================================================================================
+TF 2.21.0, TFP 0.25.0
+truth: mu=0.0, phi=0.95, sigma_eta=0.3
+T=50 N=256 n_lambda=10 K=10 L=5 step_size=0.05 dispersion=0.15
+num_chains=4 burnin=2000 results=10000
+Wall (max-chain if parallel; sum if sequential): 64497.6s
+
+param                     truth       mean        std     median       2.5%      97.5%     Rhat      ESS    bias%
+--------------------------------------------------------------------------------------------------------------
+mu                       0.0000     0.0734     0.7954     0.1091    -1.5763     1.5432    1.002    -29.3    +nan%
+phi                      0.9500     0.9466     0.0450     0.9592     0.8270     0.9903    1.001     -0.1    -0.4%
+sigma_eta_sq             0.0900     0.1262     0.0988     0.0990     0.0228     0.3912    1.001     -0.0   +40.2%
+sigma_eta (derived)      0.3000     0.3337     0.1217     0.3146     0.1511     0.6255      nan      nan   +11.2%
+
+Accept rate per chain: [0.6483333333333333, 0.6440833333333333, 0.6706666666666666, 0.7068333333333333]
+Overall accept rate:   0.667
+Final step sizes:      [0.08260133862495422, 0.08188074082136154, 0.07545743882656097, 0.06264358758926392]
+
+Notes:
+ - sigma_eta bias under the HRS Gaussian quasi-likelihood is
+   ~+30-50% on the likelihood maximum; the posterior bias is
+   T-dependent (about -15% at T=50, +3% at T=100 in our runs).
+ - For exact inference, swap in the Kim-Shephard-Chib (1998)
+   7-component Gaussian-mixture refinement of the log(eps^2) noise.
+====================================================================================================

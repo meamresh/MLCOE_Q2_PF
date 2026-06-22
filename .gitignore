@@ -122,3 +122,6 @@ events.out.tfevents.*
 # Temporary files
 tmp/
 temp/
+
+# Personal reading/scratch notes
+Reads/

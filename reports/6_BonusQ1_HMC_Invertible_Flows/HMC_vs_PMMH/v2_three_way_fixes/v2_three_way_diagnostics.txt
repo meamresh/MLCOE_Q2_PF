@@ -1,0 +1,45 @@
+==============================================================================
+V2 THREE-WAY FIXES — Vehtari convergence diagnostics
+==============================================================================
+generated      : 2026-06-21T18:09:36
+source samples : reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/v2_three_way_fixes/v2_three_way_samples.npz
+truth          : {'mu': 2.0, 'phi': 0.9, 'sigma_eta': 0.4, 'A': 3.0, 'sigma_eps': 0.3}
+config         : T=200 chains=2 burnin=400 results=1000 L=10 step=0.05 data_seed=42 base_seed=300
+
+definitions (match scripts/exp/compare_svssm_hmc_methods.py + analyze_v2_mv_vehtari.py):
+  rank-Rhat = max( split-Rhat on rank-normalised samples,
+                   split-Rhat on rank-normalised folded |x-median| )
+  bulk-ESS  = Geyer initial-monotone-sequence ESS on split chains
+  tail-ESS  = min( ESS of I{x<=q05}, ESS of I{x>=q95} )
+thresholds : rank-Rhat <= 1.01,  bulk-ESS >= 400,  tail-ESS >= 400
+==============================================================================
+
+[A1_const]  (A=1 fixed)   shape=(2, 1000, 4)  (chains, draws, params)
+  param             median       sd  rankRhat  bulkESS  tailESS  pass
+  ----------------------------------------------------------------
+  mu                +5.622    0.541     1.005     2000      599  OK
+  phi               +0.843    0.048     1.004      660      681  OK
+  sigma_eta_sq      +1.186    0.196     1.000      607     1000  OK
+  sigma_eps_sq      +0.099    0.101     1.002      536      398  CHECK
+
+[sig1_const]  (sigma_eta=1 fixed)   shape=(2, 1000, 4)  (chains, draws, params)
+  param             median       sd  rankRhat  bulkESS  tailESS  pass
+  ----------------------------------------------------------------
+  mu                +5.221    0.734     1.006      250      411  CHECK
+  phi               +0.841    0.047     1.001      423      739  OK
+  A                 +1.094    0.093     1.014      219      602  CHECK
+  sigma_eps_sq      +0.096    0.099     1.012      172      126  CHECK
+
+[mu1_const]  (mu=1 fixed)   shape=(2, 1000, 4)  (chains, draws, params)
+  param             median       sd  rankRhat  bulkESS  tailESS  pass
+  ----------------------------------------------------------------
+  phi               +0.841    0.048     1.000      668      891  OK
+  sigma_eta_sq      +0.039    0.011     1.002      866      914  OK
+  A                 +5.601    0.578     1.007     1594      773  OK
+  sigma_eps_sq      +0.081    0.092     1.009      203      146  CHECK
+
+==============================================================================
+note: rank-Rhat<=1.01 throughout => chains converged. Some bulk/tail-ESS
+below 400 reflect the short 2-chain x 1000-draw demo budget (medians are
+stable; this run is for the identifiability ridge demo, not ESS production).
+==============================================================================

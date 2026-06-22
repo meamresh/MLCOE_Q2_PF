@@ -1,0 +1,38 @@
+         9107167 function calls (9068905 primitive calls) in 3.636 seconds
+
+   Ordered by: cumulative time
+   List reduced from 674 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.000    0.000    3.637    1.212 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/mcmc/hmc.py:501(one_step)
+        3    0.000    0.000    3.637    1.212 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/mcmc/metropolis_hastings.py:160(one_step)
+        3    0.000    0.000    3.617    1.206 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/mcmc/hmc.py:660(one_step)
+        3    0.000    0.000    3.610    1.203 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/mcmc/internal/leapfrog_integrator.py:222(__call__)
+        3    0.000    0.000    3.608    1.203 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/util/deprecation.py:642(new_func)
+        3    0.000    0.000    3.608    1.203 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/ops/while_loop.py:35(while_loop_v2)
+        3    0.000    0.000    3.608    1.203 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/ops/while_loop.py:255(while_loop)
+       15    0.000    0.000    3.602    0.240 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/mcmc/internal/leapfrog_integrator.py:293(<lambda>)
+       15    0.000    0.000    3.598    0.240 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/mcmc/internal/leapfrog_integrator.py:319(_one_step)
+       18    0.000    0.000    3.595    0.200 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/mcmc/internal/util.py:287(maybe_call_fn_and_grads)
+       18    0.000    0.000    3.595    0.200 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/mcmc/internal/util.py:247(_value_and_gradients)
+       15    0.000    0.000    3.195    0.213 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/math/gradient.py:28(value_and_gradient)
+       15    0.000    0.000    3.194    0.213 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/math/gradient.py:347(_value_and_grad_impl)
+       15    0.000    0.000    3.192    0.213 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/math/gradient.py:320(_gradient_new)
+12609/8364    0.008    0.000    3.106    0.000 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/util/traceback_utils.py:138(error_handler)
+       30    0.000    0.000    3.090    0.103 /Users/amreshverma/Documents/Random Work/MLCOE_Q2_PF/scripts/profile_hmc_step_xla.py:71(target_log_prob)
+       30    0.000    0.000    3.027    0.101 /Users/amreshverma/Documents/Random Work/MLCOE_Q2_PF/src/filters/bonus/differentiable_ledh.py:207(__call__)
+       30    0.009    0.000    2.990    0.100 /Users/amreshverma/Documents/Random Work/MLCOE_Q2_PF/src/filters/bonus/differentiable_ledh.py:385(_run_1d_xla)
+      600    0.005    0.000    2.703    0.005 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/polymorphic_function/polymorphic_function.py:805(__call__)
+       15    0.000    0.000    2.691    0.179 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/math/gradient.py:378(<lambda>)
+       15    0.000    0.000    2.691    0.179 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow_probability/python/math/gradient.py:375(<lambda>)
+      600    0.003    0.000    2.679    0.004 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/polymorphic_function/polymorphic_function.py:852(_call)
+      900    0.006    0.000    2.676    0.003 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/polymorphic_function/concrete_function.py:1267(_call_flat)
+      600    0.003    0.000    2.651    0.004 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/polymorphic_function/tracing_compilation.py:125(call_function)
+      300    0.000    0.000    1.824    0.006 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/polymorphic_function/concrete_function.py:1004(record)
+      300    0.006    0.000    1.824    0.006 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/polymorphic_function/concrete_function.py:793(record)
+      300    0.147    0.000    1.814    0.006 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/polymorphic_function/concrete_function.py:700(_wrap_backward_function)
+   284445    0.457    0.000    1.251    0.000 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/backprop_util.py:53(IsTrainable)
+      900    0.036    0.000    0.828    0.001 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/polymorphic_function/atomic_function.py:219(call_flat)
+     1044    0.002    0.000    0.781    0.001 /Users/amreshverma/ml-env/lib/python3.9/site-packages/tensorflow/python/eager/execute.py:28(quick_execute)
+
+

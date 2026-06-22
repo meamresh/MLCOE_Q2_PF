@@ -1,0 +1,52 @@
+=====================================================================================
+L-HNN HMC only — dispersed-pilot training, shared CRN across chains
+Model: Andrieu et al. (2010), Eq 14-15  |  Prior: InvGamma(0.01, 0.01)
+Chains: 4  |  samples/chain: 5000  |  burn/chain: 1500
+=====================================================================================
+Metric                                              L-HNN HMC
+-------------------------------------------------------------------------------------
+Acceptance rate                                         0.577
+ESS (sigma_v^2)                                          14.7
+ESS (sigma_w^2)                                          21.8
+Mean ESS                                                 18.3
+Runtime (s)                                           29368.4
+ESS/s                                                  0.0006
+Cost per step (s/proposal)                             1.1296
+-------------------------------------------------------------------------------------
+Mean sigma_v^2                                          6.183  (true=10.000)
+Mean sigma_w^2                                          9.363  (true=1.000)
+Std sigma_v^2                                           2.585
+Std sigma_w^2                                           4.068
+-------------------------------------------------------------------------------------
+Quality vs ground truth:
+  RMSE (sigma_v^2       ) 4.6099
+  MAE  (sigma_v^2       ) 4.3390
+  RMSE (sigma_w^2       ) 9.2996
+  MAE  (sigma_w^2       ) 8.3628
+-------------------------------------------------------------------------------------
+L-HNN gradient cost breakdown (Dhulipala et al. 2022, Table 1):
+  Training (pilot) gradient evals : 620
+  Sampling fallback gradient evals : 18941
+  Total L-HNN gradient evals       : 19561
+  Traditional HMC gradient evals   : 156000  ((L+1)×iters)
+  Gradient evals saved             : 136439 (87.5%)
+  Fallback intensity (∇ / step)    : 0.729
+  Break-even iters (train÷(L+1))   : 103
+-------------------------------------------------------------------------------------
+ESS per gradient evaluation       : 9.3435e-04
+=====================================================================================
+
+Multi-chain convergence diagnostics  (Vehtari et al., 2021)
+  Pass: rankR^ < 1.01 AND bulk-ESS > 400 AND tail-ESS > 400 per param.
+
+============================================================================================
+  Diagnostics — L-HNN HMC (dispersed pilots, shared CRN)   (chains=4, samples/chain=5000, CI level=95%)
+--------------------------------------------------------------------------------------------
+param              mean        std   bulk-ESS   tail-ESS    ESS%   splitR^    rankR^                 95% CI      truth   covers?    ok
+--------------------------------------------------------------------------------------------
+sigma_v^2         6.183      2.585       87.2       78.0    0.4%     2.100     1.757        [3.202, 13.627]     10.000       YES  FAIL
+sigma_w^2         9.363      4.068       60.5       58.5    0.3%     1.584     1.857        [4.215, 19.783]      1.000        NO  FAIL
+--------------------------------------------------------------------------------------------
+  Overall verdict : NOT CONVERGED (rank-R^>=1.01 or ESS<400)
+  Coverage        : some truth not covered
+============================================================================================

@@ -1,0 +1,29 @@
+Prior-only HMC vs with-likelihood HMC — full-Phi V1 multivariate
+Prior-only run:    reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/svssm_hmc_multivariate_full_phi_prior_only
+With-likelihood:   reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/svssm_hmc_multivariate_full_phi_prod_xla
+Prior  chains × draws: 2 × 200
+Posterior chains × draws: 4 × 1000
+
+SD ratio  = post_SD / prior_SD       (1.0=no data info; <1=data narrows)
+med shift = (post_med - prior_med) / prior_SD   (data pulls posterior off prior center)
+
+RAW + DERIVED
+param               prior med  prior SD  post med   post SD  SD ratio  med shift               verdict     truth
+----------------------------------------------------------------------------------------------------------------
+mu_0                   -0.435     0.991    -0.137     0.802     0.809      0.301              moderate    +0.000
+mu_1                   -0.093     1.097    +0.028     0.496     0.453      0.110              moderate    -0.300
+phi_diag_0             +0.907     0.337    +0.916     0.186     0.554      0.027              moderate    +0.950
+phi_diag_1             +0.891     0.445    +0.811     0.346     0.777      0.180       prior-dominated    +0.850
+phi_off_01             -0.005     0.135    -0.016     0.175     1.298      0.085       prior-dominated    +0.050
+sigma_eta_sq_0         +0.131     0.332    +0.163     0.228     0.688      0.097              moderate    +0.090
+sigma_eta_sq_1         +0.136     0.232    +0.130     0.142     0.610      0.029              moderate    +0.160
+Sigma_h_00             +1.250 18550.399    +1.625     0.998     0.000      0.000              moderate    +1.062
+Sigma_h_11             +0.675    42.012    +0.426     0.471     0.011      0.006              moderate    +0.577
+Sigma_h_01             +0.000   381.247    -0.002     0.327     0.001      0.000              moderate    +0.127
+rho_h                  +0.000     0.440    -0.005     0.276     0.626      0.011              moderate    +0.163
+----------------------------------------------------------------------------------------------------------------
+
+Verdict rules:
+  data informative : SD ratio < 0.5  AND median shift > 0.3 sigma
+  moderate         : SD ratio < 0.7  OR  median shift > 0.2 sigma
+  prior-dominated  : neither (posterior ≈ prior)

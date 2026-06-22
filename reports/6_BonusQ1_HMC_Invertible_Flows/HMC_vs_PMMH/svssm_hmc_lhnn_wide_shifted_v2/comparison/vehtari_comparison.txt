@@ -1,0 +1,31 @@
+==============================================================================================================
+Vehtari comparison — vanilla HMC vs LHNN HMC
+==============================================================================================================
+vanilla_dir : reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/svssm_hmc_wide_shifted_v2
+lhnn_dir    : reports/6_BonusQ1_HMC_Invertible_Flows/HMC_vs_PMMH/svssm_hmc_lhnn_wide_shifted_v2
+truth       : mu=0.0, phi=0.95, sigma_eta=0.3
+
+Wall + cost:
+  Vanilla wall                : 6434.5 s
+  LHNN wall                   : 715.7 s
+  Speedup (wall)              : 8.99×
+  Vanilla real ∇log π evals   : 24000
+  LHNN total real ∇log π evals: 1230 (1230 pilot + 0 fallback)
+  Grad-eval savings           : 94.9%
+
+Vehtari per parameter:
+param          method         median         sd       2.5%      97.5%  rank-R̂   bulkESS   tailESS  flags
+--------------------------------------------------------------------------------------------------------------
+mu             vanilla        0.3101     1.6256    -3.8160     2.1933    1.308      75.0     250.8  R̂,bulk,tail
+mu             lhnn           0.5364     1.6439    -3.9702     3.2146    1.336      65.3     353.0  R̂,bulk,tail
+phi            vanilla        0.9506     0.5260    -0.9366     0.9959    1.370      80.1     290.8  R̂,bulk,tail
+phi            lhnn           0.9251     0.3345    -0.3025     0.9934    1.124      47.0     219.5  R̂,bulk,tail
+sigma_eta_sq   vanilla        0.1012     0.2680     0.0119     0.9570    1.202      80.5     222.2  R̂,bulk,tail
+sigma_eta_sq   lhnn           0.1790     0.3225     0.0136     1.1797    1.123      51.8     226.8  R̂,bulk,tail
+
+Posterior agreement (KS p>0.05 ⇒ indistinguishable):
+param             |Δmedian|   sd_ratio   KS_stat      KS_p  verdict
+mu                   0.2264      1.011     0.142    0.0000  DIFFER
+phi                  0.0255      0.636     0.161    0.0000  DIFFER
+sigma_eta_sq         0.0778      1.203     0.223    0.0000  DIFFER
+==============================================================================================================

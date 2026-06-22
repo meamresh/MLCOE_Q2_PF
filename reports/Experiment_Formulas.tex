@@ -1,0 +1,1103 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{longtable}
+
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+\setlist[itemize]{leftmargin=1.5em}
+\setlist[enumerate]{leftmargin=1.5em}
+\setlist[description]{leftmargin=1.8em, style=nextline}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\Cov}{\mathrm{Cov}}
+\newcommand{\tr}{\mathrm{tr}}
+\newcommand{\diag}{\mathrm{diag}}
+\newcommand{\RMSE}{\mathrm{RMSE}}
+\newcommand{\MAE}{\mathrm{MAE}}
+\newcommand{\ESS}{\mathrm{ESS}}
+\newcommand{\NEES}{\mathrm{NEES}}
+\newcommand{\NIS}{\mathrm{NIS}}
+\newcommand{\ind}{\mathbf{1}}
+
+\title{Mathematical Formulas and Derived Quantities in \code{src/experiments}}
+\author{Generated from the experiment source files}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\clearpage
+
+\section{Shared Notation}
+Unless a file states otherwise, \(t=1,\ldots,T\) indexes time, \(i=1,\ldots,N\) indexes particles or samples, \(r=1,\ldots,R\) indexes Monte Carlo runs, \(\bm{x}_t\) is a latent state, \(\bm{y}_t\) is an observation, \(\hat{\bm{x}}_t\) is an estimated state, and \(P_t\) is an estimated covariance. For particle filters, \(w_{t,i}\) denotes normalized weights unless explicitly stated. For MCMC experiments, \(\theta=(\log\sigma_v^2,\log\sigma_w^2)\) is the log-variance parameter and reported physical samples are \(\sigma^2=\exp(\theta)\).
+
+\paragraph{Common accuracy metrics.}
+For arrays with matching shape,
+\[
+\RMSE(\hat X,X)=\sqrt{\frac{1}{|\Omega|}\sum_{(t,j)\in\Omega}(\hat x_{t,j}-x_{t,j})^2},
+\qquad
+\MAE(\hat X,X)=\frac{1}{|\Omega|}\sum_{(t,j)\in\Omega}|\hat x_{t,j}-x_{t,j}|.
+\]
+Here \(\Omega\) is the set of scalar entries being compared. These formulas are used whenever an experiment calls the shared \code{compute\_rmse} or \code{compute\_mae} helpers.
+
+\paragraph{Common consistency and particle diagnostics.}
+\[
+\NEES_t=(\bm{x}^{\mathrm{true}}_t-\hat{\bm{x}}_t)^\top P_t^{-1}(\bm{x}^{\mathrm{true}}_t-\hat{\bm{x}}_t),
+\qquad
+\bar{\NEES}=\frac{1}{T}\sum_{t=1}^T \NEES_t.
+\]
+\(\NEES\) measures whether the filter covariance is statistically consistent with the actual state error; under a correct Gaussian model, \(\NEES_t\) is compared with \(\chi^2_{n_x}\).
+\[
+\NIS_t=\bm{\nu}_t^\top S_t^{-1}\bm{\nu}_t,\qquad
+\bm{\nu}_t=\bm{y}_t-\hat{\bm{y}}_{t|t-1}.
+\]
+\(\NIS\) measures consistency in measurement space using innovation covariance \(S_t\).
+\[
+\ESS_t=\frac{1}{\sum_{i=1}^{N}w_{t,i}^2},\qquad
+H_t=-\sum_i w_{t,i}\log w_{t,i},\qquad
+\tilde H_t=\frac{H_t}{\log N}.
+\]
+\(\ESS\) and entropy quantify particle degeneracy; low values indicate weight collapse.
+
+\paragraph{Common numerical diagnostics.}
+\[
+\kappa(A)=\frac{\sigma_{\max}(A)}{\sigma_{\min}(A)}
+\quad\text{or, for SPD covariance matrices,}\quad
+\kappa(P)=\frac{\lambda_{\max}(P)}{\lambda_{\min}(P)}.
+\]
+The covariance symmetry error is
+\[
+e_{\mathrm{sym}}(P)=\max_{i,j}|P_{ij}-P_{ji}|,
+\]
+and positive definiteness is checked through \(\lambda_{\min}(P)>0\).
+
+\clearpage
+
+\section{\code{exp\_part1\_1a\_lgssm\_kf.py}}
+\subsection*{Kalman Filter State Estimates}
+The experiment runs a Kalman filter on a linear Gaussian state-space model. The filtered state sequence is
+\[
+\hat{\bm{x}}_{t|t}=\E[\bm{x}_t\mid \bm{y}_{1:t}],
+\]
+computed by the Kalman filter recursion using the model matrices \(A,C,Q,R,m_0,P_0\). It is used as the main state estimate for plotting and accuracy evaluation.
+
+\subsection*{Position and Velocity Blocks}
+For a 4D state \(\bm{x}_t=(x_t,v_{x,t},y_t,v_{y,t})^\top\),
+\[
+\hat{\bm{p}}_t=(\hat x_t,\hat y_t)^\top,\qquad
+\hat{\bm{v}}_t=(\hat v_{x,t},\hat v_{y,t})^\top,
+\]
+with corresponding true blocks \(\bm{p}^{\mathrm{true}}_t\) and \(\bm{v}^{\mathrm{true}}_t\). These are used to report separate position and velocity errors.
+
+\subsection*{Position and Velocity RMSE}
+\[
+\RMSE_{\mathrm{pos}}
+=\sqrt{\frac{1}{2T}\sum_{t=1}^T\|\hat{\bm{p}}_t-\bm{p}^{\mathrm{true}}_t\|_2^2},
+\qquad
+\RMSE_{\mathrm{vel}}
+=\sqrt{\frac{1}{2T}\sum_{t=1}^T\|\hat{\bm{v}}_t-\bm{v}^{\mathrm{true}}_t\|_2^2}.
+\]
+The first quantifies tracking accuracy in position coordinates; the second quantifies velocity estimation accuracy.
+
+\section{\code{exp\_part1\_1b\_lgssm\_kf\_compare.py}}
+\subsection*{Riccati vs Joseph RMSE and MAE}
+For the Riccati and Joseph covariance updates, filtered and predicted RMSE are
+\[
+\RMSE_{\mathrm{filt}}=\sqrt{\frac{1}{Tn_x}\sum_{t,j}(\hat x_{t|t,j}-x^{\mathrm{true}}_{t,j})^2},
+\qquad
+\RMSE_{\mathrm{pred}}=\sqrt{\frac{1}{Tn_x}\sum_{t,j}(\hat x_{t|t-1,j}-x^{\mathrm{true}}_{t,j})^2}.
+\]
+The per-dimension RMSE is
+\[
+\RMSE_j=\sqrt{\frac{1}{T}\sum_{t=1}^T(\hat x_{t,j}-x^{\mathrm{true}}_{t,j})^2}.
+\]
+The MAE is the shared formula in Section 1. These metrics compare accuracy under the two algebraically equivalent but numerically different covariance updates.
+
+\subsection*{NEES and Mean NEES}
+\[
+\NEES_t=(\bm{x}^{\mathrm{true}}_t-\hat{\bm{x}}_{t|t})^\top P_{t|t}^{-1}(\bm{x}^{\mathrm{true}}_t-\hat{\bm{x}}_{t|t}),
+\qquad
+\bar{\NEES}=\frac{1}{T}\sum_t\NEES_t.
+\]
+The expected reference line is \(n_x=4\). This tests whether the reported covariance matches the actual filtering error.
+
+\subsection*{Conditioning, Symmetry, Positive Definiteness}
+\[
+\kappa(P_t)=\frac{\lambda_{\max}(P_t)}{\lambda_{\min}(P_t)},\qquad
+e_{\mathrm{sym}}(P_t)=\max_{i,j}|P_{t,ij}-P_{t,ji}|,
+\qquad
+\mathrm{PD}_t=\ind\{\lambda_{\min}(P_t)>0\}.
+\]
+The number of positive-definiteness violations is
+\[
+N_{\mathrm{viol}}=\sum_t\ind\{\lambda_{\min}(P_t)\le 0\}.
+\]
+These quantities diagnose numerical stability of each covariance update.
+
+\subsection*{Covariance Difference and Uncertainty Bands}
+\[
+d_t=\|P^{\mathrm{Ric}}_t-P^{\mathrm{Jos}}_t\|_F,
+\qquad
+\sigma_{t,j}=\sqrt{P_{t,jj}},\qquad
+\hat x_{t,j}\pm 2\sigma_{t,j}.
+\]
+The Frobenius difference measures divergence between covariance-update implementations; the \(2\sigma\) bands visualize marginal Gaussian uncertainty.
+
+\section{\code{exp\_part1\_1c\_range\_bearing\_ekf\_ukf.py}}
+\subsection*{Control Inputs}
+\[
+v_t=1.5+0.5\sin(0.15t),\qquad
+\omega_t=0.6+0.3\cos(0.12t).
+\]
+These time-varying controls drive the range-bearing localization trajectory.
+
+\subsection*{Position Error and Position RMSE}
+\[
+e^{\mathrm{pos}}_t=\|\hat{\bm{p}}_t-\bm{p}^{\mathrm{true}}_t\|_2,\qquad
+\RMSE_{\mathrm{pos}}=\sqrt{\frac{1}{T}\sum_t(e^{\mathrm{pos}}_t)^2}.
+\]
+The final position error is \(e^{\mathrm{pos}}_T\). These quantities rank UKF hyperparameter configurations.
+
+\subsection*{Circular Heading Error}
+\[
+\Delta\theta_t=\hat\theta_t-\theta^{\mathrm{true}}_t,\qquad
+e^\theta_t=\left|\operatorname{atan2}(\sin\Delta\theta_t,\cos\Delta\theta_t)\right|,
+\qquad
+\RMSE_\theta=\sqrt{\frac{1}{T}\sum_t(e^\theta_t)^2}.
+\]
+The wrapped error avoids discontinuities at \(\pm\pi\).
+
+\subsection*{Covariance Trace and Mean Error}
+\[
+u_t=\tr(P_t),\qquad
+\bar e_{\mathrm{pos}}=\frac{1}{T}\sum_t e^{\mathrm{pos}}_t.
+\]
+The trace is used as a scalar total-uncertainty diagnostic for EKF and UKF.
+
+\subsection*{Relative Winner Percentage}
+If UKF has lower mean position error,
+\[
+\mathrm{improvement}_{\mathrm{UKF}}
+=100\frac{\bar e_{\mathrm{EKF}}-\bar e_{\mathrm{UKF}}}{\bar e_{\mathrm{EKF}}}.
+\]
+The EKF case swaps EKF and UKF. This reports relative mean-error improvement.
+
+\subsection*{Grid-Search Aggregates}
+For all successful configurations sharing the same \(\alpha\),
+\[
+\bar r_\alpha=\frac{1}{|K_\alpha|}\sum_{k\in K_\alpha}\RMSE_{\mathrm{pos},k},
+\qquad
+s_\alpha=\sqrt{\frac{1}{|K_\alpha|}\sum_{k\in K_\alpha}(\RMSE_{\mathrm{pos},k}-\bar r_\alpha)^2}.
+\]
+These form the error bars in the UKF parameter-sensitivity plot.
+
+\section{\code{exp\_part1\_1d\_linearization\_sigma\_pt\_failures.py}}
+\subsection*{Monte Carlo Linearization Error}
+For uncertainty scale \(s\),
+\[
+P=sI_3,\qquad
+\bm{x}^{(k)}\sim\mathcal N(\bm{x}_0,P),\qquad
+\hat S_{\mathrm{true}}=\widehat{\Cov}\{h(\bm{x}^{(k)})\}.
+\]
+The EKF linearized innovation covariance is
+\[
+S_{\mathrm{lin}}=HPH^\top+R,
+\]
+where \(H=\left.\partial h/\partial x\right|_{\bm{x}_0}\). The diagonal relative variance error is
+\[
+e_{\mathrm{var}}=
+\frac{1}{d_z}\sum_{j=1}^{d_z}
+\frac{|(\hat S_{\mathrm{true}})_{jj}-(S_{\mathrm{lin}})_{jj}|}{(\hat S_{\mathrm{true}})_{jj}+10^{-6}}.
+\]
+It measures how badly EKF linearization approximates nonlinear measurement uncertainty.
+
+\subsection*{Sigma-Point Collapse}
+For sigma-point propagated measurements \(\bm{z}_i=h(\chi_i)\),
+\[
+s^{\mathrm{emp}}_j=\operatorname{std}_i(z_{i,j}),\qquad
+s^{\mathrm{pred}}_j=\sqrt{S_{jj}},\qquad
+\rho_j=\frac{s^{\mathrm{emp}}_j}{s^{\mathrm{pred}}_j+10^{-10}}.
+\]
+Small \(\rho_j\) indicates that sigma points do not capture predicted measurement spread.
+
+\subsection*{Trajectory NEES}
+\[
+\NEES_t=(\bm{x}^{\mathrm{true}}_t-\hat{\bm{x}}_t)^\top P_t^{-1}(\bm{x}^{\mathrm{true}}_t-\hat{\bm{x}}_t),
+\qquad
+\bar{\NEES}=\frac{1}{T}\sum_t\NEES_t,
+\]
+with consistency bounds \(\chi^2_{3,0.025}\) and \(\chi^2_{3,0.975}\).
+
+\subsection*{Linearized Measurement Samples}
+\[
+\bm{z}^{(k)}_{\mathrm{lin}}=h(\bm{x}_0)+H(\bm{x}^{(k)}-\bm{x}_0),\qquad
+\bar{\bm z}=\frac{1}{K}\sum_k\bm z^{(k)},\qquad
+\widehat{\Cov}(\bm z)=\frac{1}{K-1}\sum_k(\bm z^{(k)}-\bar{\bm z})(\bm z^{(k)}-\bar{\bm z})^\top.
+\]
+The percent error shown in variance/covariance bar charts is
+\[
+e_{\%}=100\frac{|a-b|}{|a|}.
+\]
+
+\subsection*{Covariance Ellipses and Heatmaps}
+For a 2D covariance with eigenvalues \(\lambda_1,\lambda_2\), the plotted ellipse dimensions are proportional to \(4\sqrt{\lambda_i}\). The nonlinearity heatmap uses
+\[
+\kappa(H)=\frac{\sigma_{\max}(H)}{\sigma_{\min}(H)},\qquad
+r=\|\bm{p}-\bm{\ell}\|_2.
+\]
+
+\subsection*{Importance-Weighted Posterior Approximation}
+For sampled states \(\bm{x}_k\), measurement \(\bm{y}\), and predictions \(\bm{z}_k=h(\bm{x}_k)\),
+\[
+\ell_k=-\frac12(\bm{y}-\bm{z}_k)^\top R^{-1}(\bm{y}-\bm{z}_k),\qquad
+w_k=\frac{\exp(\ell_k-\max_j\ell_j)}{\sum_m\exp(\ell_m-\max_j\ell_j)}.
+\]
+The weighted posterior moments are
+\[
+\bm{\mu}=\sum_k w_k\bm{x}_k,\qquad
+\Sigma=\sum_k w_k(\bm{x}_k-\bm{\mu})(\bm{x}_k-\bm{\mu})^\top.
+\]
+The EKF mean error is \(\|\bm{\mu}_{\mathrm{EKF},1:2}-\bm{\mu}_{1:2}\|_2\), and the diagonal covariance error is
+\[
+e_{\mathrm{cov}}=\frac12\sum_{j\in\{x,y\}}
+\frac{|P^{\mathrm{EKF}}_{jj}-\Sigma_{jj}|}{\Sigma_{jj}+10^{-6}}.
+\]
+
+\section{\code{exp\_part1\_1e\_particle\_degeneracy.py}}
+\subsection*{Weight Degeneracy Metrics}
+\[
+\ESS_t=\frac{1}{\sum_iw_{t,i}^2},\qquad
+\tilde H_t=-\frac{\sum_iw_{t,i}\log w_{t,i}}{\log N},\qquad
+\Var(w_t)=\frac{1}{N}\sum_i(w_{t,i}-\bar w_t)^2,\qquad
+w^{\max}_t=\max_iw_{t,i}.
+\]
+These are recorded over time to diagnose particle degeneracy. The resampling reference line is \(rN\), where \(r\) is the resampling-threshold fraction.
+
+\subsection*{Summary Statistics and Resampling Rate}
+\[
+\bar{\ESS}=\frac{1}{T}\sum_t\ESS_t,\quad
+\ESS_{\min}=\min_t\ESS_t,\quad
+\bar H=\frac{1}{T}\sum_t\tilde H_t,\quad
+H_{\min}=\min_t\tilde H_t,
+\]
+\[
+\mathrm{resampling\ rate}=100\frac{|\{t:\mathrm{resampled\ at\ }t\}|}{T}.
+\]
+
+\subsection*{Cumulative Weight Concentration}
+Let \(w_{(1)}\ge\cdots\ge w_{(N)}\) be sorted weights. Then
+\[
+C_k=\sum_{i=1}^kw_{(i)},\qquad
+n_p=\min\{k:C_k\ge p\}.
+\]
+The experiment reports \(n_{0.5}\) and \(n_{0.95}\), the number of particles carrying 50\% and 95\% of posterior mass.
+
+\subsection*{Particle Spread and Weighted Covariance Ellipse}
+Marker sizes are scaled as
+\[
+s_i=10+100\frac{w_i}{\max_jw_j}.
+\]
+For 2D positions \(\bm{p}_i\),
+\[
+\bm{\mu}=\sum_iw_i\bm{p}_i,\qquad
+C=\sum_iw_i(\bm{p}_i-\bm{\mu})(\bm{p}_i-\bm{\mu})^\top.
+\]
+With eigenvalues \(\lambda_1,\lambda_2\), a \(n_\sigma\)-ellipse uses axes \(2n_\sigma\sqrt{\lambda_i}\).
+
+\subsection*{Synthetic Circular Trajectory}
+\[
+x_{t+1}=x_t+v\Delta t\cos\theta_t,\qquad
+y_{t+1}=y_t+v\Delta t\sin\theta_t,\qquad
+\theta_{t+1}=\theta_t+\omega\Delta t+\epsilon_{\theta,t},
+\]
+with additive Gaussian noise on the state. This provides a controlled trajectory for degeneracy diagnostics.
+
+\section{\code{exp\_part1\_1f\_runtime\_memory.py}}
+\subsection*{Profiling Metrics}
+\[
+\Delta t^{\mathrm{pred}}_t=t^{\mathrm{end}}_{\mathrm{pred},t}-t^{\mathrm{start}}_{\mathrm{pred},t},\qquad
+\Delta t^{\mathrm{upd}}_t=t^{\mathrm{end}}_{\mathrm{upd},t}-t^{\mathrm{start}}_{\mathrm{upd},t}.
+\]
+\[
+T_{\mathrm{profile}}=\sum_t\Delta t^{\mathrm{pred}}_t+\sum_t\Delta t^{\mathrm{upd}}_t,\qquad
+\bar t_{\mathrm{pred}}=\frac{1}{T}\sum_t\Delta t^{\mathrm{pred}}_t,\qquad
+\bar t_{\mathrm{upd}}=\frac{1}{T}\sum_t\Delta t^{\mathrm{upd}}_t.
+\]
+Peak memory is
+\[
+M_{\mathrm{peak}}=\frac{\max_t\mathrm{RSS}(t)}{1024^2}\ \mathrm{MB}.
+\]
+These quantities compare runtime and memory overhead across filters.
+
+\subsection*{Convergence Time}
+For position errors \(e_t=\|\hat{\bm p}_t-\bm p_t^{\mathrm{true}}\|_2\),
+\[
+t_{\mathrm{conv}}=\min\{i:e_j<\tau\ \forall j\ge i\},
+\]
+with value \(-1\) if no such \(i\) exists. It measures when the filter remains below a chosen position-error threshold.
+
+\subsection*{Consistency Percentage}
+\[
+\mathrm{Consistency}=100\frac{1}{|\mathcal T|}
+\sum_{t\in\mathcal T}\ind\{\chi^2_{d,\alpha/2}\le\NEES_t\le\chi^2_{d,1-\alpha/2}\}.
+\]
+It reports the percentage of finite NEES values lying inside the nominal confidence interval.
+
+\subsection*{Position, Heading, NEES, and NIS}
+Position RMSE and wrapped heading RMSE use the formulas from \code{exp\_part1\_1c}. NIS is computed as
+\[
+\NIS=\bm{\nu}^\top(S+\epsilon I)^{-1}\bm{\nu},
+\]
+using a 2D measurement block, with reference bounds \(\chi^2_{2,0.025}\) and \(\chi^2_{2,0.975}\). Mean NEES and mean NIS are time averages.
+
+\subsection*{Speed, Accuracy, and Scaling Summaries}
+\[
+\mathrm{speed\ ratio}_{A/B}=\frac{T_A}{T_B},\qquad
+\mathrm{RMSE\ change}_{A/B}=100\frac{\RMSE_B-\RMSE_A}{\RMSE_B}.
+\]
+For particle-count scaling over trials,
+\[
+\bar r_N=\frac{1}{R}\sum_r r_{N,r},\qquad
+s_N=\sqrt{\frac{1}{R}\sum_r(r_{N,r}-\bar r_N)^2},\qquad
+\mathrm{CV}_N=100\frac{s_N}{\bar r_N}.
+\]
+Average step time is
+\[
+\bar t_{\mathrm{step}}=1000(\bar t_{\mathrm{pred}}+\bar t_{\mathrm{upd}})\ \mathrm{ms}.
+\]
+
+\section{\code{exp\_part1\_2a\_hu\_vanleeuwen\_fig2\_fig3.py}}
+\subsection*{Line Geometry for Figure 2}
+\[
+\bm d=\bm p_2-\bm p_1,\qquad
+\bm c=\frac12(\bm p_1+\bm p_2),\qquad
+\hat{\bm d}=\frac{\bm d}{\|\bm d\|_2},\qquad
+\bm e_{\pm}=\bm c\pm\frac{\gamma}{2}\|\bm d\|_2\hat{\bm d}.
+\]
+The endpoints \(\bm e_\pm\) draw an extended line through two particles, with extension factor \(\gamma\).
+
+\subsection*{Scalar and Matrix Kernels}
+\[
+K_{\mathrm{mat},j}(\bm p_1,\bm p_2)
+=\exp\left(-\frac{(p_{1,j}-p_{2,j})^2}{\sigma_j^2}\right),
+\qquad
+K_{\mathrm{sc}}(\bm p_1,\bm p_2)
+=\exp\left(-\frac{\|\bm p_1-\bm p_2\|_2^2}{1.4\sigma^2}\right).
+\]
+The plotted forces are
+\[
+\bm f^{\mathrm{mat}}_{\pm}
+=\pm\alpha^{-1}2(\bm p_1-\bm p_2)\odot\bm\sigma^{-2}\odot K_{\mathrm{mat}},
+\qquad
+\bm f^{\mathrm{sc}}_{\pm}
+=\pm\alpha^{-1}\frac{2}{\sigma^2}(\bm p_1-\bm p_2)K_{\mathrm{sc}}.
+\]
+They illustrate scalar versus matrix-valued kernel effects.
+
+\subsection*{Lorenz-96 Localization and Prior Covariance}
+For periodic distance \(d_{ij}=\min(|i-j|,D-|i-j|)\),
+\[
+C_{ij}=\exp\left(-\frac{d_{ij}^2}{r_{\mathrm{in}}^2}\right).
+\]
+For ensemble members \(\bm x_i\),
+\[
+\bar{\bm x}=\frac{1}{N}\sum_i\bm x_i,\qquad
+\hat\Sigma=\frac{1}{N-1}\sum_i(\bm x_i-\bar{\bm x})(\bm x_i-\bar{\bm x})^\top,\qquad
+B=(\hat\Sigma\odot C).
+\]
+The code symmetrizes \(B\) and adds a small diagonal jitter proportional to the mean diagonal variance. This localized covariance is the PFF background covariance.
+
+\subsection*{Observation Noise and RMSE}
+\[
+\sigma_y=\sqrt{\mathrm{obs\_noise\_var}},\qquad
+\RMSE_{\mathrm{full}}=\sqrt{\frac{1}{D}\sum_{d=1}^D(\bar x_d-x_d^{\mathrm{true}})^2}.
+\]
+Observed and unobserved RMSE use the same formula restricted to \(\mathcal O\) or \(\mathcal O^c\). Innovation RMSE compares the prior mean to noisy observations on \(\mathcal O\):
+\[
+\RMSE_{\mathrm{innov}}=\sqrt{\frac{1}{|\mathcal O|}\sum_{d\in\mathcal O}(\bar x_d-y_d)^2}.
+\]
+
+\subsection*{Spread, Diversity, and Improvement}
+For a selected component \(d\),
+\[
+s^{\mathrm{prior}}_d=\operatorname{std}_i(x^{\mathrm{prior}}_{i,d}),\qquad
+s^{\mathrm{post}}_d=\operatorname{std}_i(x^{\mathrm{post}}_{i,d}),\qquad
+\mathrm{diversity\ ratio}=\frac{s^{\mathrm{post}}_d}{s^{\mathrm{prior}}_d}.
+\]
+RMSE improvement is
+\[
+100\frac{\RMSE_{\mathrm{prior}}-\RMSE_{\mathrm{post}}}{\RMSE_{\mathrm{prior}}}.
+\]
+
+\section{\code{exp\_part1\_2b\_Li(17)\_multitarget\_acoustic.py}}
+\subsection*{Full-State and Position RMSE}
+The full-state RMSE is the shared RMSE over all state entries. For \(K\) targets with positions \(\bm p_{t,k}\),
+\[
+e_{t,k}=\|\hat{\bm p}_{t,k}-\bm p^{\mathrm{true}}_{t,k}\|_2,\qquad
+\RMSE_t^{\mathrm{pos}}=\frac{1}{K}\sum_{k=1}^{K}e_{t,k}.
+\]
+This gives the time-varying multitarget position-error curve.
+
+\subsection*{ESS and Runtime}
+\[
+\ESS_t=\frac{1}{\sum_iw_{t,i}^2+\epsilon},\qquad
+T_{\mathrm{exec}}=t_{\mathrm{end}}-t_{\mathrm{start}}.
+\]
+ESS measures degeneracy for particle methods; execution time measures filter cost.
+
+\subsection*{Monte Carlo Aggregates}
+For metric values \(z_r\) over runs,
+\[
+\bar z=\frac{1}{R}\sum_{r=1}^Rz_r,\qquad
+s_z=\sqrt{\frac{1}{R}\sum_r(z_r-\bar z)^2}.
+\]
+For ESS curves with missing values, means and standard deviations are computed only over finite entries at each time. The reported average ESS is the mean of the finite ESS mean time series.
+
+\section{\code{exp\_part1\_2c\_filters\_comparison\_diagnostics.py}}
+\subsection*{Flow Magnitude}
+For particles before and after an update,
+\[
+\Delta_i=\bm x^{\mathrm{after}}_i-\bm x^{\mathrm{before}}_i,\qquad
+m_i=\|\Delta_i\|_2.
+\]
+The experiment records \(\bar m\), \(\operatorname{std}(m_i)\), and \(\max_i m_i\) to diagnose unstable particle transport.
+
+\subsection*{Condition Numbers, ESS, and Degeneracy Rate}
+\[
+\kappa(J)=\frac{\sigma_{\max}(J)}{\sigma_{\min}(J)},\qquad
+\kappa(P)=\frac{\sigma_{\max}(P)}{\sigma_{\min}(P)},\qquad
+\ESS=\frac{1}{\sum_iw_i^2}.
+\]
+Across time, means, standard deviations, maxima, and minima are reported. The particle-degeneracy rate is
+\[
+\frac{1}{T}\sum_t\ind\{\ESS_t<N/2\}.
+\]
+
+\subsection*{Correlated Measurement Noise}
+For sensors at positions \(\bm s_i\),
+\[
+R_{ij}=\rho\exp\left(-\frac{\|\bm s_i-\bm s_j\|_2}{10}\right),\quad i\ne j,\qquad
+R_{ii}=1,\qquad
+\bm\epsilon=\sigma_w L\bm\xi,\quad LL^\top\approx R+\epsilon I.
+\]
+This creates correlated acoustic measurement noise.
+
+\subsection*{Trajectory RMSE and Divergence}
+\[
+\RMSE_t=\sqrt{\frac{1}{d_s}\sum_j(\hat x_{t,j}-x^{\mathrm{true}}_{t,j})^2},\qquad
+\mathrm{diverged}=\ind\{\RMSE>100\}.
+\]
+Full-run RMSE uses the shared RMSE over all times and state dimensions.
+
+\subsection*{Experiment Aggregates}
+Across successful runs,
+\[
+\mathrm{success\ rate}=\frac{n_{\mathrm{success}}}{n_{\mathrm{runs}}},
+\qquad
+\bar z=\frac{1}{R}\sum_rz_r,\qquad
+s_z=\sqrt{\frac{1}{R}\sum_r(z_r-\bar z)^2}.
+\]
+Boolean stability fields are summarized as rates.
+
+\subsection*{Correlation, Ranking, and Comparisons}
+Pearson correlation between diagnostic \(x_i\) and RMSE \(y_i\) is
+\[
+r=\frac{\frac{1}{n}\sum_i(x_i-\bar x)(y_i-\bar y)}
+{\sqrt{\frac{1}{n}\sum_i(x_i-\bar x)^2}\sqrt{\frac{1}{n}\sum_i(y_i-\bar y)^2}}.
+\]
+Average rank is the mean of scenario-wise RMSE ranks. A radar score rescales rank to
+\[
+\mathrm{score}=1-\frac{\mathrm{avg\_rank}-1}{F-1}.
+\]
+For matrix versus scalar filters,
+\[
+\Delta=\RMSE_{\mathrm{scalar}}-\RMSE_{\mathrm{matrix}},\qquad
+\mathrm{margin}=|\Delta|,\qquad
+\mathrm{time\ ratio}=\frac{T_{\mathrm{matrix}}}{T_{\mathrm{scalar}}},
+\]
+\[
+\mathrm{RMSE\ improvement}=100\frac{\RMSE_{\mathrm{scalar}}-\RMSE_{\mathrm{matrix}}}{\RMSE_{\mathrm{scalar}}},
+\qquad
+\mathrm{time\ overhead}=100\frac{T_{\mathrm{matrix}}-T_{\mathrm{scalar}}}{T_{\mathrm{scalar}}}.
+\]
+
+\subsection*{Heatmap and Failure Metrics}
+The heatmap uses
+\[
+z_{\mathrm{heat}}=\log_{10}(\RMSE+1).
+\]
+The failure rate per method is
+\[
+100\frac{1}{S}\sum_{s=1}^{S}\ind\{\RMSE_s>10\ \mathrm{or}\ \mathrm{success\ rate}_s<0.7\}.
+\]
+Stability scores count threshold violations such as large Jacobian condition number, large covariance condition number, low ESS, and large flow magnitude.
+
+\section{\code{exp\_part2\_1a\_spf\_dai\_daum.py}}
+\subsection*{Stiffness Ratio}
+The stiffness condition number is
+\[
+\kappa^*(M)=\tr(M)\tr(M^{-1}).
+\]
+Along a homotopy trajectory,
+\[
+R_{\mathrm{stiff}}(\lambda)=\frac{\kappa^*(M(\beta(\lambda)))}{\kappa^*(M(\beta(0)))}.
+\]
+This is used to compare linear and optimized homotopies.
+
+\subsection*{Linear Interpolation}
+For knots \((x_\ell,y_\ell)\) and \((x_h,y_h)\),
+\[
+w=\frac{x-x_\ell}{x_h-x_\ell},\qquad
+y(x)=y_\ell+w(y_h-y_\ell).
+\]
+This evaluates optimized \(\beta^*(\lambda)\) on plotting grids.
+
+\subsection*{Homotopy Error and Objective}
+\[
+e(\lambda)=\beta^*(\lambda)-\lambda.
+\]
+The objective compared for linear and optimized homotopies is
+\[
+J(\beta)=\int_0^1
+\left[
+\frac12\left(\frac{d\beta}{d\lambda}\right)^2
+\mu\,\kappa^*(M(\beta(\lambda)))
+\right]\,d\lambda,
+\]
+implemented by numerical quadrature. Its reduction is
+\[
+100\frac{J_{\mathrm{linear}}-J_{\mathrm{optimal}}}{J_{\mathrm{linear}}}.
+\]
+
+\subsection*{Monte Carlo RMSE, Trace, and Reductions}
+For each Monte Carlo observation,
+\[
+\RMSE=\sqrt{\frac{1}{d}\sum_j(\hat x_j-x^{\mathrm{true}}_j)^2},\qquad
+\tr(\hat P)=\sum_j\hat P_{jj}.
+\]
+Across runs the experiment reports means and reductions:
+\[
+100\frac{\bar r_{\mathrm{linear}}-\bar r_{\mathrm{optimal}}}{\bar r_{\mathrm{linear}}},
+\qquad
+100\frac{\overline{\tr P}_{\mathrm{linear}}-\overline{\tr P}_{\mathrm{optimal}}}{\overline{\tr P}_{\mathrm{linear}}}.
+\]
+
+\subsection*{Timing and Measurements}
+\[
+\bm z=h(\bm x^{\mathrm{true}})+\bm v,\qquad \bm v\sim\mathcal N(0,R).
+\]
+Training, filtering, and total times are wall-clock differences \(t_{\mathrm{end}}-t_{\mathrm{start}}\).
+
+\section{\code{exp\_part2\_2a\_reproduce\_corenflos\_table1.py}}
+\subsection*{Linear Gaussian Model}
+\[
+\bm x_t=\diag(\bm\theta)\bm x_{t-1}+\bm v_t,\qquad
+\bm v_t\sim\mathcal N(0,I),
+\]
+\[
+\bm y_t=\bm x_t+\bm w_t,\qquad
+\bm w_t\sim\mathcal N(0,0.1I).
+\]
+This model is used to compare PF, DPF, and soft-resampling likelihood estimators.
+
+\subsection*{Observation Log Density}
+\[
+\log p(\bm y\mid\bm x)
+=-\frac12\left[
+(\bm y-C\bm x)^\top R^{-1}(\bm y-C\bm x)
+\log\det R+d_y\log(2\pi)
+\right].
+\]
+
+\subsection*{Kalman Log-Likelihood}
+With innovation \(\bm\nu_t=\bm y_t-C\bm m_{t|t-1}\) and
+\(S_t=CP_{t|t-1}C^\top+R\),
+\[
+\ell(\theta)=\sum_{t=1}^{T}
+-\frac12\left[
+\bm\nu_t^\top S_t^{-1}\bm\nu_t+\log\det S_t+d_y\log(2\pi)
+\right].
+\]
+The normalized truth is \(l_{\mathrm{true}}=\ell(\theta)/T\).
+
+\subsection*{ELBO or Log-Likelihood Estimate}
+\[
+\hat l=\frac{1}{T}\widehat{\log p}(\bm y_{1:T}\mid\theta).
+\]
+Across seeds,
+\[
+\bar l=\frac{1}{S}\sum_s\hat l_s,\qquad
+s_l=\sqrt{\frac{1}{S-1}\sum_s(\hat l_s-\bar l)^2},\qquad
+\mathrm{bias}=\bar l-l_{\mathrm{true}}.
+\]
+These are the bias and variance entries in the reproduced table.
+
+\subsection*{Tradeoff Timing}
+\[
+\mathrm{avg\ time\ per\ run\ (ms)}=1000\frac{T_{\mathrm{total}}}{B},
+\]
+where \(B\) is batch size. Scatter plots use bias, standard deviation, time, \(\epsilon\), and Sinkhorn iterations.
+
+\section{\code{exp\_part2\_2b\_dpf\_bias\_variance\_speed\_tradeoff.py}}
+This file reuses the LGSSM, observation log density, Kalman log-likelihood, normalized estimator, bias, standard deviation, and time formulas from \code{exp\_part2\_2a}.
+
+\subsection*{Tradeoff Grids and Marker Scaling}
+For unique Sinkhorn temperatures \(\mathcal E\) and iteration counts \(\mathcal I\), grid entries store
+\[
+B_{a,b}=\mathrm{bias}(\epsilon_a,K_b),\qquad
+S_{a,b}=\mathrm{std}(\epsilon_a,K_b),\qquad
+T_{a,b}=\mathrm{time}(\epsilon_a,K_b).
+\]
+Pareto marker size is
+\[
+s_i=25+80\frac{t_i-t_{\min}}{t_{\max}-t_{\min}}.
+\]
+These quantities visualize the bias-variance-speed tradeoff.
+
+\section{\code{exp\_part2\_2c\_DPF\_comparison.py}}
+\subsection*{Kitagawa State-Space Model}
+\[
+\mu_t(x)=\frac12x+\frac{25\phi x}{1+x^2}+8\cos(1.2t),
+\qquad
+x_t=\mu_t(x_{t-1})+v_t,\quad v_t\sim\mathcal N(0,\sigma_v^2).
+\]
+\[
+h(x)=\frac{x^2}{20},\qquad
+y_t=h(x_t)+w_t,\quad w_t\sim\mathcal N(0,\sigma_w^2).
+\]
+This nonlinear model is the benchmark for differentiable particle filters.
+
+\subsection*{Observation Log Density}
+\[
+\log p(y\mid x)
+=-\frac12\frac{(y-x^2/20)^2}{\sigma_w^2}
+-\frac12\log(2\pi\sigma_w^2).
+\]
+
+\subsection*{Ground-Truth Reference and Bias}
+The large-\(N\) PF reference is
+\[
+\hat\ell_{\mathrm{GT}}=\frac{1}{S}\sum_{s=1}^{S}\hat\ell_s^{(N_{\mathrm{large}})}.
+\]
+For benchmark runs,
+\[
+\bar\ell=\frac{1}{K}\sum_k\ell_k,\qquad
+s_\ell=\sqrt{\frac{1}{K}\sum_k(\ell_k-\bar\ell)^2},\qquad
+\mathrm{bias}=\bar\ell-\hat\ell_{\mathrm{GT}}.
+\]
+
+\subsection*{Gradient SNR}
+For valid gradients \(g_k=\partial\log\hat p(y_{1:T}\mid\phi)/\partial\phi\),
+\[
+\bar g=\frac{1}{K}\sum_kg_k,\qquad
+s_g=\sqrt{\frac{1}{K}\sum_k(g_k-\bar g)^2},\qquad
+\mathrm{SNR}=\frac{|\bar g|}{s_g+10^{-10}}.
+\]
+The mean absolute gradient is \(K^{-1}\sum_k|g_k|\). Gradients exceeding the explosion threshold are excluded.
+
+\subsection*{Likelihood Surface Smoothness}
+For likelihood values \(\ell_i=\ell(\phi_i)\) on an ordered grid,
+\[
+\mathrm{FD}^2=\frac{1}{M-1}\sum_{i=1}^{M-1}(\ell_{i+1}-\ell_i)^2,
+\]
+\[
+\mathrm{Curvature}^2=\frac{1}{M-2}\sum_{i=1}^{M-2}(\ell_{i+2}-2\ell_{i+1}+\ell_i)^2.
+\]
+The shaded jaggedness band uses half-width \(d_i=|\ell_{i+1}-\ell_i|\).
+
+\subsection*{Timing}
+\[
+\bar t_{\mathrm{ms}}=\frac{1000}{K}\sum_k(t^{\mathrm{end}}_k-t^{\mathrm{start}}_k).
+\]
+This is the reported latency.
+
+\section{\code{exp\_part3\_bonus1a\_pfpf\_ledh\_kitagawa.py}}
+\subsection*{Augmented Kitagawa Model}
+The augmented process covariance is
+\[
+Q_{\mathrm{aug}}=\diag(q,\sigma_{\mathrm{dummy}}^2).
+\]
+The first state follows
+\[
+f_1(x_t,u_t)=\frac12x_t+\frac{25x_t}{1+x_t^2}+8\cos(1.2u_t),
+\]
+while the dummy coordinate is unchanged. The observation is
+\[
+h(x)=\frac{x^2}{20}.
+\]
+
+\subsection*{Jacobians}
+\[
+\frac{\partial f_1}{\partial x}
+=\frac12+25\frac{1-x^2}{(1+x^2)^2},
+\qquad
+\frac{\partial h}{\partial x}=\frac{x}{10}.
+\]
+These are used by LEDH/PFPF linearizations.
+
+\subsection*{Filter Output Metrics}
+\[
+\hat x_t=\mathrm{state}_t^{(1)},\qquad
+\RMSE=\sqrt{\frac{1}{T}\sum_t(\hat x_t-x_t^{\mathrm{true}})^2}.
+\]
+Particle degeneracy is summarized by
+\[
+\ESS_t=\frac{(\sum_iw_{t,i})^2}{\sum_iw_{t,i}^2+\epsilon},\qquad
+\bar{\ESS}=\frac{1}{T}\sum_t\ESS_t,\qquad
+\ESS_{\min}=\min_t\ESS_t.
+\]
+The predicted measurement curve is \(\hat y_t=\hat x_t^2/20\).
+
+\section{\code{exp\_part3\_bonus1b\_hmc\_vs\_pmmh.py}}
+\subsection*{Kitagawa Data}
+\[
+x_1\sim\mathcal N(0,5),\qquad
+x_t=\frac12x_{t-1}+\frac{25x_{t-1}}{1+x_{t-1}^2}+8\cos(1.2t)+v_t,
+\]
+\[
+y_t=\frac{x_t^2}{20}+w_t,\qquad
+v_t\sim\mathcal N(0,\sigma_v^2),\quad
+w_t\sim\mathcal N(0,\sigma_w^2).
+\]
+
+\subsection*{Log-Posterior Target}
+For \(\theta=(\theta_v,\theta_w)=(\log\sigma_v^2,\log\sigma_w^2)\),
+\[
+\log\tilde\pi(\theta)
+=\log p_{\mathrm{IG}}(e^{\theta_v};a,b)
++\log p_{\mathrm{IG}}(e^{\theta_w};a,b)
++\theta_v+\theta_w
++\widehat{\log p}(\bm y_{1:T}\mid e^{\theta_v},e^{\theta_w}).
+\]
+The \(\theta_v+\theta_w\) term is the log-Jacobian from variance space to log-variance space. The target is used by PMMH, HMC-LEDH, and L-HNN variants.
+
+\subsection*{Autocorrelation Function}
+For a scalar chain \(x_i\), centered values \(c_i=x_i-\bar x\), and variance \(\hat\sigma^2=\max(n^{-1}\sum_ic_i^2,10^{-12})\),
+\[
+\rho_0=1,\qquad
+\rho_k=\frac{\sum_{i=1}^{n-k}c_ic_{i+k}}{n\hat\sigma^2}.
+\]
+The ACF assesses sample dependence.
+
+\subsection*{Parameter Error Metrics}
+For physical samples \(s_i=\exp(\theta_i)\) and true value \(\tau\),
+\[
+\RMSE=\sqrt{\frac{1}{n}\sum_i(s_i-\tau)^2},\qquad
+\MAE=\frac{1}{n}\sum_i|s_i-\tau|.
+\]
+
+\subsection*{Distribution Distances}
+\[
+D_{\mathrm{KS}}=\sup_x|\hat F_A(x)-\hat F_B(x)|,
+\qquad
+W_1\approx\int|\hat F_A(x)-\hat F_B(x)|\,dx.
+\]
+These compare posterior marginals between samplers.
+
+\subsection*{Efficiency}
+\[
+\mathrm{cost/step}=\frac{T_{\mathrm{runtime}}}{n_{\mathrm{sample}}+n_{\mathrm{burn}}},
+\qquad
+\mathrm{ESS/s}=\frac{\bar{\ESS}_{\mathrm{MCMC}}}{T_{\mathrm{runtime}}}.
+\]
+For HMC with \(L\) leapfrog steps,
+\[
+\mathrm{ESS/grad}_{\mathrm{HMC}}=
+\frac{\bar{\ESS}}{(L+1)(n_{\mathrm{sample}}+n_{\mathrm{burn}})}.
+\]
+For L-HNN,
+\[
+\mathrm{ESS/grad}_{\mathrm{L\text{-}HNN}}=
+\frac{\bar{\ESS}}{G_{\mathrm{train}}+G_{\mathrm{sample}}},
+\qquad
+\mathrm{saved}=G_{\mathrm{HMC}}-G_{\mathrm{L\text{-}HNN}},
+\qquad
+\mathrm{saved\%}=100\frac{\mathrm{saved}}{G_{\mathrm{HMC}}}.
+\]
+The fallback rate is the fraction of leapfrog steps requiring the true gradient.
+
+\subsection*{Gradient Probe}
+For gradients \(\bm g_s=\nabla_\theta\log\tilde\pi_s(\theta_0)\) over CRN seeds,
+\[
+\|\bm g_s\|_2,\qquad
+\mathrm{CV}=\frac{\operatorname{std}_s\|\bm g_s\|_2}{\operatorname{mean}_s\|\bm g_s\|_2+10^{-12}},
+\]
+\[
+\mathrm{MAD}_{\log}=\operatorname{median}_s\left|\log_{10}\max(\|\bm g_s\|_2,10^{-300})-\operatorname{median}_r\log_{10}\max(\|\bm g_r\|_2,10^{-300})\right|.
+\]
+These diagnose gradient noise and horizon sensitivity.
+
+\subsection*{Multi-Chain Diagnostics}
+Rank normalization uses
+\[
+u_i=\frac{r_i-3/8}{N-1/4},\qquad z_i=\Phi^{-1}(u_i),
+\]
+where \(r_i\) are average ranks. The document reports bulk ESS, tail ESS, split \(\hat R\), rank-normalized \(\hat R\), 95\% credible intervals, coverage
+\[
+\ind\{\mathrm{CI}_{0.025}\le\tau\le\mathrm{CI}_{0.975}\},
+\]
+and
+\[
+\mathrm{ESS\%}=100\frac{\mathrm{bulk\ ESS}}{CS}.
+\]
+Convergence requires \(\hat R<1.01\), bulk ESS \(>400\), and tail ESS \(>400\).
+
+\subsection*{Ablation Metrics}
+\[
+\mathrm{bias}_{\mathrm{true}}=|\bar{\bm s}-\bm\tau|,
+\qquad
+\mathrm{bias}_{\mathrm{PMMH}}=|\bar{\bm s}-\bar{\bm s}_{\mathrm{PMMH}}|.
+\]
+These compare HMC/L-HNN ablations to the generative truth and PMMH reference posterior.
+
+\section{\code{exp\_part3\_bonus1b\_pmmh\_only.py}}
+This isolated PMMH driver uses the Kitagawa simulator, log-posterior target, ACF, RMSE, MAE, acceptance rate, and multi-chain diagnostics defined in the previous section.
+\[
+\widehat{\log p}_{\mathrm{BPF}}(\bm y_{1:T}\mid\theta)
+\]
+is estimated with a bootstrap particle filter and inserted into the PMMH target. Across saved chains, total runtime is either the sum of per-chain runtimes or an estimate from file modification times. Trace, histogram, and ACF plots use pooled physical samples \(\exp(\theta)\).
+
+\section{\code{exp\_part3\_bonus1b\_hmc\_ledh\_only.py}}
+This isolated HMC driver uses the same Kitagawa simulator and log-posterior target, with an LEDH particle-filter likelihood estimate. The reported formulas are
+\[
+\mathrm{cost/step}=\frac{T_{\mathrm{total}}}{C(S_{\mathrm{sample}}+S_{\mathrm{burn}})},\qquad
+\mathrm{ESS/s}=\frac{\bar{\ESS}}{T_{\mathrm{total}}},
+\]
+plus RMSE, MAE, acceptance rate, and the multi-chain diagnostics from \code{exp\_part3\_bonus1b\_hmc\_vs\_pmmh.py}. Here \(C\) is number of chains and \(S_{\mathrm{sample}},S_{\mathrm{burn}}\) are per-chain post-burn and burn-in counts.
+
+\section{\code{exp\_part3\_bonus1b\_lhnn\_only.py}}
+This isolated L-HNN driver uses the same Bayesian model and LEDH likelihood target as the HMC driver.
+
+\subsection*{Pilot Allocation}
+If \(N_{\mathrm{traj}}\) pilot trajectories are split over \(C\) starts,
+\[
+n_c=\left\lfloor\frac{N_{\mathrm{traj}}}{C}\right\rfloor+\ind\{c\le N_{\mathrm{traj}}\bmod C\}.
+\]
+This distributes pilot simulations across dispersed initial states.
+
+\subsection*{Gradient Accounting}
+\[
+G_{\mathrm{L\text{-}HNN}}=G_{\mathrm{train}}+G_{\mathrm{sample}},\qquad
+G_{\mathrm{HMC}}=(L+1)C(S_{\mathrm{sample}}+S_{\mathrm{burn}}).
+\]
+\[
+\mathrm{saved}=G_{\mathrm{HMC}}-G_{\mathrm{L\text{-}HNN}},\qquad
+\mathrm{saved\%}=100\frac{\mathrm{saved}}{G_{\mathrm{HMC}}},
+\]
+\[
+\mathrm{fallback\ intensity}=\frac{G_{\mathrm{sample}}}{C(S_{\mathrm{sample}}+S_{\mathrm{burn}})},\qquad
+\mathrm{breakeven}=\frac{G_{\mathrm{train}}}{L+1},\qquad
+\mathrm{ESS/grad}=\frac{\bar{\ESS}}{G_{\mathrm{L\text{-}HNN}}}.
+\]
+The aggregate runtime can include sampling, pilot generation, and neural training wall time.
+
+\subsection*{L-HNN Training Loss}
+The learned Hamiltonian \(H_\psi(q,p)\) is fit to Hamiltonian dynamics:
+\[
+\mathcal L(\psi)
+=\left\|\frac{\partial H_\psi}{\partial p}-\frac{dq}{dt}\right\|^2
++\left\|-\frac{\partial H_\psi}{\partial q}-\frac{dp}{dt}\right\|^2,
+\]
+with \(dq/dt=p\) and \(dp/dt=\nabla_q\log\tilde\pi(q)\). The purpose is to reduce true-gradient calls during HMC trajectories.
+
+\section{\code{exp\_part3\_bonus2a\_neural\_ot.py}}
+\subsection*{Nonlinear SSM Data}
+The simulator is the same Kitagawa model:
+\[
+x_1\sim\mathcal N(0,5),\quad
+x_t=\frac12x_{t-1}+\frac{25x_{t-1}}{1+x_{t-1}^2}+8\cos(1.2t)+\sigma_v\eta_t,\quad
+y_t=\frac{x_t^2}{20}+\sigma_w\xi_t.
+\]
+
+\subsection*{Gradient and Likelihood Agreement}
+For Sinkhorn and neural-OT gradients \(\bm g_S,\bm g_N\),
+\[
+\mathrm{cos}(\bm g_S,\bm g_N)
+=\frac{\bm g_S^\top\bm g_N}{\|\bm g_S\|_2\|\bm g_N\|_2+10^{-20}},
+\qquad
+\mathrm{grad\ ratio}=\frac{\|\bm g_N\|_2}{\|\bm g_S\|_2+10^{-20}}.
+\]
+For likelihoods \(\ell_S^{(i)}\) and \(\ell_N^{(i)}\),
+\[
+\mathrm{MAE}_{\ell}=\frac{1}{|\mathcal I|}\sum_{i\in\mathcal I}|\ell_S^{(i)}-\ell_N^{(i)}|,
+\qquad
+\mathrm{MRE}_{\ell}=\frac{1}{|\mathcal I|}\sum_i\frac{|\ell_S^{(i)}-\ell_N^{(i)}|}{|\ell_S^{(i)}|+10^{-20}}.
+\]
+Pearson correlation \(r\) uses the standard centered covariance divided by product of standard deviations. These metrics evaluate neural OT as an approximation to Sinkhorn OT.
+
+\subsection*{Timing and Speedup}
+\[
+\bar t_{\mathrm{total}}=\bar t_{\mathrm{forward}}+\bar t_{\mathrm{backward}},
+\qquad
+\mathrm{speedup}=\frac{\bar t_{\mathrm{total,Sinkhorn}}}{\bar t_{\mathrm{total,NN}}+10^{-20}}.
+\]
+
+\subsection*{HMC Target and Posterior Summaries}
+The HMC target is the same inverse-gamma prior plus log-Jacobian plus filter likelihood:
+\[
+\log\tilde p(\theta)
+=\log p_{\mathrm{IG}}(e^{\theta_v})+\log p_{\mathrm{IG}}(e^{\theta_w})+\theta_v+\theta_w+\ell_f(\theta).
+\]
+Samples are transformed as \(\sigma^2=\exp(\theta)\). The experiment reports TFP MCMC ESS, acceptance rate, posterior bias
+\[
+|\bar\sigma_v^2-\sigma_{v,\mathrm{true}}^2|,\qquad
+|\bar\sigma_w^2-\sigma_{w,\mathrm{true}}^2|,
+\]
+wall time, and ESS per second.
+
+\subsection*{Neural OT Supervised Loss and Ablations}
+For neural map \(f_\psi\) and Sinkhorn target \(T^{\mathrm{Sink}}\),
+\[
+\mathcal L(\psi)=\operatorname{mean}\left[(f_\psi(\tilde X,w,c)-T^{\mathrm{Sink}})^2\right].
+\]
+Gradients are clipped to norm 5 in the ablation training loop. In-distribution and OOD test MSE use the same mean-squared-error formula over held-out examples. Ablation deltas are
+\[
+\Delta_a=\mathrm{MSE}_a-\mathrm{MSE}_{\mathrm{full}},\qquad
+\%\Delta_a=100\frac{\Delta_a}{\mathrm{MSE}_{\mathrm{full}}+10^{-20}}.
+\]
+
+\subsection*{Training Data Normalization and Context}
+\[
+\bar x=\frac{1}{N}\sum_ix_i,\qquad
+s_x=\operatorname{std}_i(x_i)+\epsilon,\qquad
+\tilde x_i=\frac{x_i-\bar x}{s_x}.
+\]
+The context vector is
+\[
+c=(\log\sigma_v^2,\log\sigma_w^2,t/T_{\max},y_t,\ESS,\epsilon_{\mathrm{Sinkhorn}}).
+\]
+Masking ablations replace selected context coordinates by zero.
+
+\section{\code{exp\_part3\_bonus2b\_neural\_ot\_scaling.py}}
+\subsection*{Synthetic Scaling Data}
+\[
+x_{m,i}\sim\mathcal N(0,1),\qquad
+w'_{m,i}\sim\mathrm{Uniform}(0,1),\qquad
+w_{m,i}=\frac{w'_{m,i}}{\sum_jw'_{m,j}}.
+\]
+The Sinkhorn target is a deterministic resampling map
+\[
+T_m^{\mathrm{Sink}}=\mathrm{det\_resample}(x_m,w_m;\epsilon,K).
+\]
+
+\subsection*{Training and Test MSE}
+\[
+\mathcal L(\psi)=\operatorname{mean}\left[(f_\psi(X,w,c)-T^{\mathrm{Sink}})^2\right],
+\qquad
+\mathrm{MSE}_{\mathrm{test}}=\frac{1}{M_{\mathrm{test}}}\sum_m\operatorname{mean}_i
+\left[(\hat X^{\mathrm{out}}_{m,i}-T^{\mathrm{Sink}}_{m,i})^2\right].
+\]
+
+\subsection*{Timing Microbenchmark}
+\[
+\mathrm{avg\ ms}=1000\frac{t_{\mathrm{end}}-t_{\mathrm{start}}}{n_{\mathrm{iters}}}.
+\]
+Forward and backward times are measured for both Sinkhorn and the neural map. The synthetic backward loss is \(\operatorname{mean}(X^{\mathrm{out}})\), differentiated with respect to the input particles.
+
+\section{\code{exp\_part3\_bonus2c\_hyper\_deeponet.py}}
+\subsection*{Data and Supervised Loss}
+The data generator is a NumPy-loop Kitagawa simulator. Neural models are trained with
+\[
+\mathcal L(\phi)=\operatorname{mean}\left[(M_\phi(V)-T^{\mathrm{Sink,norm}})^2\right],
+\]
+where \(V=(\mathrm{particles\_norm},w,c)\) and \(M_\phi\) is mGradNet, DeepONet, or Hyper-DeepONet. Best, final, and history losses are epoch aggregates of this MSE.
+
+\subsection*{Pearson Correlation}
+\[
+r(x,y)=\frac{\sum_i(x_i-\bar x)(y_i-\bar y)}
+{\sqrt{\sum_i(x_i-\bar x)^2}\sqrt{\sum_i(y_i-\bar y)^2}+10^{-20}}.
+\]
+This correlates neural-method log-likelihoods with Sinkhorn log-likelihoods.
+
+\subsection*{Evaluation Timing and Gradient Metrics}
+Each method evaluates \(\ell(\theta)\), \(\nabla_\theta\ell(\theta)\), and elapsed wall time. Gradient cosine and norm ratio are the same as in \code{exp\_part3\_bonus2a}. Mean absolute and relative likelihood errors are
+\[
+\E_i|\ell_S^{(i)}-\ell_m^{(i)}|,
+\qquad
+\E_i\frac{|\ell_S^{(i)}-\ell_m^{(i)}|}{|\ell_S^{(i)}|+\epsilon}.
+\]
+Trainable parameter count is \(\sum_v\prod_{d\in\mathrm{shape}(v)}d\).
+
+\section{\code{exp\_part3\_bonus3\_ssl\_comparison.py}}
+\subsection*{Filtering RMSE}
+For latent trajectories \(\hat z_{t,d}\) and \(z^{\mathrm{true}}_{t,d}\),
+\[
+\RMSE_z=\sqrt{\frac{1}{Td_z}\sum_{t,d}(\hat z_{t,d}-z^{\mathrm{true}}_{t,d})^2}.
+\]
+It is reported for Particle Gibbs, DPF-HMC, and PMMH latent reconstructions.
+
+\subsection*{Test and Training Log-Likelihood Scores}
+For particle forward weights \(\alpha_{t,p}\),
+\[
+\log\hat p(\bm x_{1:T})
+=\sum_{t=1}^{T}\left[
+\log\sum_{p=1}^{P}\alpha_{t,p}-\log P
+\right].
+\]
+This structure is used for PG training marginal likelihood and test log-likelihood. DPF-HMC training score is the final stored HMC log probability; PMMH training score is the final stored PMMH log-likelihood estimate.
+
+\subsection*{Runtime Per Iteration and Acceptance}
+\[
+t_{\mathrm{PG/iter}}=\frac{T_{\mathrm{PG}}}{N_{\mathrm{PG\ iters}}},
+\qquad
+t_{\mathrm{DPF/iter}}=\frac{T_{\mathrm{DPF}}}{N_{\mathrm{HMC\ samples}}},
+\qquad
+t_{\mathrm{PMMH/iter}}=\frac{T_{\mathrm{PMMH}}}{N_{\mathrm{PMMH\ outer}}}.
+\]
+The DPF-HMC acceptance rate is the sampler's accepted-proposal fraction.
+
+\subsection*{Emission-Parameter Errors}
+With reference \(C_{\mathrm{ref}}=I\) and true diagonal observation variance vector \(\bm r_{\mathrm{true}}\),
+\[
+e_C=\|C-C_{\mathrm{ref}}\|_F,\qquad
+e_R=\|\bm r_\theta-\bm r_{\mathrm{true}}\|_2.
+\]
+These quantify emission-matrix and observation-noise recovery.
+
+\subsection*{Initialization and Posterior Summaries}
+PMMH observation variance initialization is
+\[
+\hat{\bm r}_0=\max(0.1\,\operatorname{Var}_t(\bm x_t),10^{-4}),\qquad
+\log\bm r_0=\log\hat{\bm r}_0.
+\]
+Posterior trajectory bands use
+\[
+\mu_d(t)=\frac{1}{S}\sum_s z^{(s)}_{t,d},\qquad
+\sigma_d(t)=\sqrt{\frac{1}{S}\sum_s(z^{(s)}_{t,d}-\mu_d(t))^2},
+\]
+and plot \(\mu_d(t)\pm2\sigma_d(t)\). HMC trace overlays use the sample mean \(\bar s_i=S^{-1}\sum_s s_{s,i}\). Observation variances are transformed as \(R_{jj}=\exp(\log R_j)\).
+
+\section{Second-Pass Coverage Checklist}
+The document above was assembled after reviewing all 22 files in \code{src/experiments}:
+\begin{itemize}
+\item \code{exp\_part1\_1a\_lgssm\_kf.py}
+\item \code{exp\_part1\_1b\_lgssm\_kf\_compare.py}
+\item \code{exp\_part1\_1c\_range\_bearing\_ekf\_ukf.py}
+\item \code{exp\_part1\_1d\_linearization\_sigma\_pt\_failures.py}
+\item \code{exp\_part1\_1e\_particle\_degeneracy.py}
+\item \code{exp\_part1\_1f\_runtime\_memory.py}
+\item \code{exp\_part1\_2a\_hu\_vanleeuwen\_fig2\_fig3.py}
+\item \code{exp\_part1\_2b\_Li(17)\_multitarget\_acoustic.py}
+\item \code{exp\_part1\_2c\_filters\_comparison\_diagnostics.py}
+\item \code{exp\_part2\_1a\_spf\_dai\_daum.py}
+\item \code{exp\_part2\_2a\_reproduce\_corenflos\_table1.py}
+\item \code{exp\_part2\_2b\_dpf\_bias\_variance\_speed\_tradeoff.py}
+\item \code{exp\_part2\_2c\_DPF\_comparison.py}
+\item \code{exp\_part3\_bonus1a\_pfpf\_ledh\_kitagawa.py}
+\item \code{exp\_part3\_bonus1b\_hmc\_vs\_pmmh.py}
+\item \code{exp\_part3\_bonus1b\_pmmh\_only.py}
+\item \code{exp\_part3\_bonus1b\_hmc\_ledh\_only.py}
+\item \code{exp\_part3\_bonus1b\_lhnn\_only.py}
+\item \code{exp\_part3\_bonus2a\_neural\_ot.py}
+\item \code{exp\_part3\_bonus2b\_neural\_ot\_scaling.py}
+\item \code{exp\_part3\_bonus2c\_hyper\_deeponet.py}
+\item \code{exp\_part3\_bonus3\_ssl\_comparison.py}
+\end{itemize}
+The second pass specifically searched for function definitions and metric-like computations including RMSE, ESS, NEES, NIS, likelihoods, losses, gradients, timings, correlations, bias, variance, covariance, condition numbers, acceptance rates, coverage, scores, ratios, speedups, and plot-only derived quantities.
+
+\end{document}

@@ -1,0 +1,15 @@
+==========================================================================================
+Section 2 Phase 3: three-architecture comparison
+==========================================================================================
+TF 2.16.2
+Data: 1296 train / 324 val samples (grid 3x3x3 thetas, 3 seeds/theta, T=20, N=64)
+Training: lr=0.001 bs=64 max_ep=80 patience=12 n_ridges=64
+Test theta for sanity LL: (mu=0, phi=0.95, sigma_eta=0.3)
+
+arch                params   val MSE  best ep  conv ep  train s  fwd ms  fwd+g ms  |delta| lp
+------------------------------------------------------------------------------------------
+mgradnet            71,490   0.00297       79       -1     43.2   269.2     748.6      0.0999
+deeponet           113,026   0.00478       61       73     57.1   270.2     748.3      0.0272
+hyper_deeponet     121,282   0.00425       77       -1     63.0   257.1     723.8      0.2083
+==========================================================================================
+Sinkhorn baseline log p (test theta): -43.7945

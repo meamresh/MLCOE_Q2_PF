@@ -1,0 +1,34 @@
+================================================================================================
+NN-OT vs Sinkhorn posteriors — matched d=1 moderate-prior runs (only the OT resample differs)
+================================================================================================
+generated      : 2026-06-22T01:30:44
+NN-OT run      : reports/d1_lhnn_nnot_moderate_T100   (draws=4000)
+Sinkhorn run   : reports/d1_lhnn_sinkhorn_moderate_T100   (draws=4000)
+truth          : mu=0.0  phi=0.95  sigma_eta_sq=0.09
+metrics        : KS = two-sample Kolmogorov-Smirnov; Wass = 1-D Wasserstein; sd ratio = NN-OT/Sinkhorn
+================================================================================================
+
+PER-PARAMETER POSTERIORS
+  param         src          median     mean      sd     2.5%    97.5%  P(phi<0)  cov
+  ---------------------------------------------------------------------------------
+  mu            NN-OT        -0.309   -0.281   0.442   -1.083   +0.676         -    Y
+  mu            Sinkhorn     -0.291   -0.256   0.416   -1.029   +0.675         -    Y
+
+  phi           NN-OT        +0.805   +0.692   0.328   -0.342   +0.977      5.9%    Y
+  phi           Sinkhorn     +0.796   +0.670   0.345   -0.367   +0.974      6.6%    Y
+
+  sigma_eta_sq  NN-OT        +0.122   +0.161   0.131   +0.026   +0.473         -    Y
+  sigma_eta_sq  Sinkhorn     +0.131   +0.165   0.129   +0.026   +0.520         -    Y
+
+DISTRIBUTIONAL COMPARISON (NN-OT vs Sinkhorn)
+  param          |d median|  sd ratio  KS stat     KS p      Wass               verdict
+  -----------------------------------------------------------------------------------
+  mu                 0.0181     1.062   0.0250   0.1641    0.0294     indistinguishable
+  phi                0.0089     0.950   0.0423   0.0016    0.0233       distinguishable
+  sigma_eta_sq       0.0092     1.018   0.0420   0.0017    0.0067       distinguishable
+
+================================================================================================
+Reading: medians/CIs agree to within MC noise (point inference identical);
+KS may flag a SIGNIFICANT but TINY shape difference (small KS stat /
+Wasserstein) — the operator-approximation signature, not a material shift.
+================================================================================================

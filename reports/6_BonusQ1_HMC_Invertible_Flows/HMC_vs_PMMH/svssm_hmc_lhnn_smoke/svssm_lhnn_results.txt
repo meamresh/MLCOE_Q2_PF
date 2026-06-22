@@ -1,0 +1,37 @@
+==============================================================================================================
+SVSSM LHNN HMC Parameter Recovery Report
+==============================================================================================================
+TF 2.16.2, TFP 0.24.0
+truth: mu=0.0, phi=0.95, sigma_eta=0.3
+T=20 N=64 n_lambda=10 K=10 L=5 step_size=0.05 dispersion=0.15
+num_chains=1 burnin=50 results=100
+Wall: 31.5s
+
+LHNN config: hidden_units=64, num_hidden=2, epochs=500, pilot=(8,15)
+  error_threshold=10.0, cooldown_steps=10, target_accept=0.45
+
+param                       truth       mean        std     median       2.5%      97.5%     Rhat      ESS    bias%
+------------------------------------------------------------------------------------------------------------------------
+mu                         0.0000    -1.7753     0.3754    -1.8083    -2.3567    -1.0574      nan     13.2    +nan%
+phi                        0.9500     0.9608     0.0229     0.9656     0.9046     0.9902      nan     17.2    +1.1%
+sigma_eta_sq               0.0900     0.1408     0.0693     0.1324     0.0449     0.2900      nan     10.9   +56.4%
+sigma_eta (derived)        0.3000     0.3641     0.0909     0.3639     0.2120     0.5385      nan      nan   +21.4%
+
+Accept rate per chain: [0.8199999928474426]
+Overall accept rate:   0.820
+
+Gradient-eval accounting:
+  Training (pilot)   : 128
+  Sampling fallback  : 0
+  Total LHNN         : 128
+  Vanilla HMC equiv  : 900 (= chains * (L+1) * (burnin+results))
+  Saved              : 772 (85.8%)
+
+Notes:
+ - Same data + target + priors as exp_hmc_svssm.py at this base_seed.
+ - LHNN cost is dominated by the one-off pilot phase; sampling-
+   phase gradient evals are typically <5% of vanilla HMC's.
+ - Posterior shape MUST match vanilla HMC (the target is identical).
+   Any disagreement is a kernel-quality issue (under-trained L-HNN,
+   too-loose error_threshold, or too-short chain).
+==============================================================================================================
