@@ -1,15 +1,15 @@
-## Interview resubmission (SVSSM) — read this first
+## Interview Resubmission (SVSSM) — read this first
 
 The focused deliverable for the interview is the **SVSSM parameter-estimation
 pipeline** (differentiable particle-filter likelihood → HMC in TFP → posterior
 analysis, with a neural-operator OT resampler and an L-HNN sampler accelerator).
 
-- **`interview_answers.pdf`** — the submission. Answers each question in turn
+- [**`HMC_SV_Report.pdf`**](HMC_SV_Report.pdf) — the submission. Answers each question in turn
   (JIT/efficiency & the cost of differentiating Sinkhorn; parameter recovery 1D→d;
   the initial condition `h_0`; the additive model `A`; identifiability & restrictions;
-  neural-operator design and training; L-HNN acceleration). Self-contained — every
-  number is in-line. Source: `interview_answers.tex`.
-- **`results_traceability.md`** — full index: every reported number/table → the exact
+  neural-operator design and training; L-HNN acceleration). 
+
+- [**`results_traceability.md`**](results_traceability.md) — full index: every reported number/table → the exact
   script, data directory, and command that produces it.
 
 ### Reproduce the fast results (laptop, seconds–minutes each)
@@ -32,7 +32,7 @@ python3 scripts/exp/exp_v2_multivariate_demo.py && python3 scripts/exp/analyze_v
 ```
 
 The longer HMC / HPC runs (1D wide-prior sweep, d=2 L-HNN+NN-OT T-sweep, the
-L-HNN benchmark) have their commands in `results_traceability.md`.
+L-HNN benchmark) have their commands in [`results_traceability.md`](results_traceability.md).
 
 The interview SVSSM filters live in **`src/filters/bonus/extra_bonus/`**
 (`differentiable_ledh_svssm.py` 1D, `…_svssm_multivariate.py` d≥2,
